@@ -1,7 +1,7 @@
 # WebXR 3D Gaussian Splatting (3DGS) Interactive Viewer
 
 > **3D 가우시안 스플래팅 기반 실시간 WebXR 인터랙티브 뷰어 시스템**  
-> WebGL 2.0 / Three.js 하이브리드 파이프라인과 시공간 3D 메타데이터 핀(POI)을 결합하여, 브라우저 및 Meta Quest 환경에서 60~90 FPS의 안정적인 공간 탐색을 제공합니다.
+> WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 60~90 FPS의 안정적인 공간 탐색과 6DoF 인터랙션을 제공합니다.
 
 [![Three.js](https://img.shields.io/badge/Three.js-r160-black.svg)](https://threejs.org/)
 [![WebXR](https://img.shields.io/badge/WebXR-Meta%20Quest%202%2F3%2FPro-blue.svg)](https://immersiveweb.dev/)
@@ -13,7 +13,7 @@
 
 ### 메인 뷰어 실행 화면
 
-| Bonsai Tree (경량 .ksplat 씬 & 3D POI 정합) | Golden Dragon (.splat 씬 & 지면 안착) |
+| Bonsai Tree (경량 .ksplat 씬) | Golden Dragon (.splat 씬) |
 | :---: | :---: |
 | ![Bonsai Tree Scene](docs/images/showcase_bonsai.png) | ![Golden Dragon Scene](docs/images/showcase_dragon.png) |
 
@@ -31,13 +31,12 @@
 
 ## 2. 문제 의식
 
-1. **전통적인 3D 폴리곤 메시의 한계**:
-   - 벚꽃 잎사귀 수천 장, 나뭇가지, 거친 조약돌 요철 등 고주파 미세 형상을 표현하려면 수백만 개의 삼각형 폴리곤과 고해상도 텍스처가 요구되어 실시간 렌더링 부하가 급증하고 실물감이 저하됨.
-2. **NeRF(신경 방사 필드)의 연산 오버헤드**:
-   - NeRF는 사실적인 볼류메트릭 렌더링이 가능하나, 광선 투사(Ray-marching) 당 수십 번의 딥러닝 MLP 추론이 필요하여 웹 및 모바일 HMD 환경에서 실시간 프레임(60~90fps) 방어가 불가능함.
-3. **3DGS(3D Gaussian Splatting)의 웹/XR 도입 필요성**:
-   - 3차원 공분산 타원체를 타일 기반으로 고속 래스터라이제이션하는 3DGS는 NeRF 수준의 실사 품질과 메시 수준의 렌더 속도를 동시에 만족함.
-   - 본 프로젝트는 3DGS를 Three.js 씬 그래프와 결합하고, WebXR 6DoF 컨트롤러 인터랙션 및 시공간 메타데이터 핀을 연동하는 **경량화된 크로스 플랫폼 뷰어 파이프라인**을 구축하고자 함.
+1. **독립형 모바일 VR 단말(Meta Quest)의 렌더링 병목**:
+   - 3DGS는 PC 고성능 GPU에서는 빠르지만, 수십만 개의 반투명 타원체가 중첩되는 특성상 Meta Quest(Snapdragon XR2)와 같은 모바일 TBDR(타일 기반 지연 렌더러) 구조에서는 심각한 알파 오버드로우(Alpha Overdraw)와 필레이트(Fill-rate) 포화가 발생하여 프레임이 급락함.
+2. **실시간 시점 정렬(Sorting) 연산의 메인 스레드 블로킹**:
+   - 카메라 뷰에 따라 수십만 개의 가우시안 중심점을 매 프레임 깊이순으로 정렬해야 하며, 이를 메인 스레드에서 처리할 경우 화면 끊김(Jank)과 극심한 VR 멀미를 유발함.
+3. **WebXR 기반 6DoF 공간 인터랙션 파이프라인의 부재**:
+   - 기존의 웹 기반 3DGS 뷰어들은 주로 마우스 궤도 회전에 국한되어, 독립형 HMD 환경에서의 양안 스테레오 렌더 루프 및 6DoF 컨트롤러 인터랙션(부드러운 보행, 스냅턴, 텔레포트, 양손 공간 스케일)을 통합한 실시간 시스템이 부족함.
 
 ---
 
@@ -49,18 +48,17 @@ flowchart TB
         PLY[".ply / .splat / .ksplat"]
     end
 
-    subgraph Core["2. 렌더링 파이프라인 (Engine Core)"]
+    subgraph Core["2. 렌더링 파이프라인"]
         SM["SplatManager\n(@mkkellogg/gaussian-splats-3d)"]
-        WASM["Web Worker WASM Radix Sort\n(카메라 시점별 가우시안 정렬)"]
+        WASM["Web Worker WASM Radix Sort\n(SharedArrayBuffer 멀티스레드 정렬)"]
         GPU["WebGL2 Float Texture 버퍼 바인딩\n& 인스턴스 래스터라이제이션"]
-        TScene["Three.Scene Graph\n(그리드, 3D POI 핀, 조명)"]
+        TScene["Three.js 씬 그래프\n(가상 공간 바닥 그리드, 조명)"]
     end
 
-    subgraph Interaction["3. 인터랙션 & WebXR 레이어"]
+    subgraph Interaction["3. WebXR 6DoF 인터랙션"]
         WXR["WebXRManager\n(Stereo Camera Rig, 6DoF Controllers)"]
-        XRIM["XRInteractionManager\n(텔레포트, 스냅턴, 양손 스케일)"]
-        POI["POIManager\n(3D 원뿔 핀, 펄스 애니메이션, 레이캐스팅)"]
-        UI["OverlayUI & POICard\n(HUD 드로어, GPU 튜닝, 메타데이터 팝업)"]
+        XRIM["XRInteractionManager\n(텔레포트, 부드러운 보행, 양손 스케일/회전)"]
+        UI["OverlayUI & GPU Tuning HUD\n(Splat Scale, Alpha Cutoff 실시간 제어)"]
     end
 
     PLY --> SM
@@ -69,35 +67,32 @@ flowchart TB
     GPU <--> TScene
     TScene <--> WXR
     WXR --> XRIM
-    TScene <--> POI
-    POI <--> UI
+    SM <--> UI
 ```
 
 * **하이브리드 합성 렌더링 루프**:
-  가우시안 스플랫 메쉬와 Three.js의 일반 3D 객체(POI 핀, 바닥 그리드)를 동일한 WebGL 렌더 타겟에 깊이 버퍼(Depth Buffer) 정합을 유지하며 합성 렌더링.
+  가우시안 스플랫 메쉬와 Three.js의 가상 3D 객체를 동일한 WebGL 렌더 타겟에 깊이 버퍼 정합을 유지하며 합성 렌더링.
 * **스테레오 렌더 루프 분기**:
-  PC 단일 뷰포트(requestAnimationFrame) 모드와 WebXR 스테레오 좌/우안(XRSession.requestAnimationFrame) 렌더 루프를 매끄럽게 전환.
+  PC 단일 뷰포트(`requestAnimationFrame`) 모드와 WebXR 스테레오 좌/우안(`setAnimationLoop`) 렌더 루프를 매끄럽게 전환.
 
 ---
 
 ## 4. 핵심 트러블슈팅 및 최적화
 
-### 1) 반투명 가우시안과 불투명 Three.js 메쉬 간의 뎁스 정합 및 피킹
+### 1) 모바일 HMD(Meta Quest)를 위한 GPU 알파 오버드로우 최적화
 * **문제 현상**:
-  - 가우시안 스플랫은 수십만 개의 반투명 쿼드로 렌더링되므로, 일반 불투명 Three.js 메쉬(POI 핀)를 배치할 때 깊이 정렬이 깨져 핀이 모델 내부로 파묻히거나 레이캐스터가 가우시안 구름에 막히는 문제.
+  - Meta Quest의 내장 GPU(Snapdragon XR2)는 반투명 쿼드 중첩(Alpha Overdraw)에 매우 취약하여, 스테레오 렌더링 시 필레이트 병목으로 인해 프레임이 급락하는 현상 발생.
 * **해결 방법**:
-  - POI 핀 메쉬의 피벗을 원뿔 꼭짓점(로컬 $Y=0.00$)에 정확히 일치시키고, 모델 표면 실측 좌표 바로 위 $4mm$ 직상방 앵커로 정렬.
-  - 원뿔은 불투명 메쉬로 뎁스 테스트를 활성화(`depthTest: true`)하고, 발광 펄스 링은 `depthWrite: false`의 가산 블렌딩으로 처리하여 3DGS 표면과 시각적 간섭 없이 선명하게 부유하도록 설계.
-  - 마우스 및 XR 컨트롤러 레이캐스팅 대상 레이어를 POI 전용 그룹(`POIGroup`)으로 한정하여 3DGS 포인트 클라우드와의 레이 충돌 연산 오버헤드를 $O(N) \rightarrow O(K)$ ($K$: 핀 개수)로 대폭 단축.
+  - **Alpha Cutoff 조기 프루닝**: 시각적 기여도가 미미한 저밀도 투명 가우시안을 조기에 기각(Discard)하여 픽셀 셰이더 연산 부하를 30% 이상 절감.
+  - **Splat Scale 반경 압축**: 개별 가우시안 타원체의 반경을 미세 축소하여 쿼드 간 중첩 면적을 최소화하고 타일 메모리 대역폭을 확보.
+  - **실시간 GPU 튜닝 HUD**: 씬 재로드 없이 브라우저 및 VR 세션 내에서 스케일, 컷오프, 점군(Point Cloud) 모드를 즉시 전환할 수 있는 제어 패널 구축.
 
-### 2) 퀘스트 독립형 VR을 위한 GPU 최적화 HUD
+### 2) SharedArrayBuffer 기반 WASM 정렬과 WebXR 스테레오 루프 통합
 * **문제 현상**:
-  - Meta Quest의 내장 GPU(Snapdragon XR2)는 반투명 오버드로우(Alpha Overdraw)에 매우 취약하여 스테레오 렌더링 시 프레임 드랍 발생.
+  - 수십만 개 가우시안의 깊이 정렬(Sorting)을 자바스크립트 메인 스레드에서 수행할 시 프레임 드랍이 발생하며, 브라우저 보안 정책상 멀티스레딩(`SharedArrayBuffer`)이 기본 차단됨.
 * **해결 방법**:
-  - 실시간 GPU 튜닝 패널을 설계하여, 씬을 다시 로드하지 않고도 다음 파라미터를 즉시 조절할 수 있도록 구현:
-    - **Splat Scale (0.2x ~ 2.0x)**: 개별 가우시안 타원체의 반경을 축소하여 오버드로우 면적을 최소화.
-    - **Alpha Cutoff (1 ~ 255)**: 기여도가 미미한 저밀도 투명 가우시안을 조기 프루닝하여 셰이더 연산 부하 30% 이상 절감.
-    - **Point Cloud Mode**: 대규모 씬에서 래스터라이제이션 부하를 줄이기 위한 순수 점군 모드 지원.
+  - Vite 개발/프로덕션 서버에 `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp` 보안 격리 헤더를 적용하여 Web Worker 간 `SharedArrayBuffer` 기반 WASM Radix Sort 파이프라인 활성화.
+  - 일반 데스크톱 단일 뷰포트 루프와 WebXR 스테레오 좌/우안 루프를 매끄럽게 전환하여 60~90 FPS의 안정적인 프레임 페이싱 방어.
 
 ---
 
@@ -109,7 +104,6 @@ flowchart TB
 | **마우스 좌클릭 드래그** | 씬 360° 궤도 회전 |
 | **마우스 우클릭 드래그** | 카메라 이동 |
 | **마우스 휠 스크롤** | 카메라 확대 / 축소 |
-| **마우스 좌클릭 (3D 핀 조준)** | 해당 핀의 시공간 메타데이터 카드 팝업 표시 |
 | **상단 드롭다운 / 파일 열기** | 프리셋 모델 전환 (`Bonsai`, `Dragon`) 및 로컬 3DGS 파일 로드 |
 | **우측 상단 튜닝 버튼** | GPU 실시간 렌더 튜닝 드로어 패널 토글 |
 
@@ -119,7 +113,6 @@ flowchart TB
 | **왼손 썸스틱** | 부드러운 전후좌우 보행 이동 |
 | **오른손 썸스틱** | 45° 스냅 회전 |
 | **오른손 트리거 (길게 누름)** | 바닥 포물선 궤적 텔레포트 |
-| **오른손 레이저 조준 + 트리거 클릭** | 3D POI 핀 선택 및 컨트롤러 햅틱 진동 피드백 |
 | **양손 그립 버튼** | 공간 전체 확대/축소 및 자유 회전 |
 
 ---
