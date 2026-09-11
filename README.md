@@ -1,11 +1,11 @@
-# 🥽 WebXR 3D Gaussian Splatting (3DGS) Interactive Viewer
+# WebXR 3D Gaussian Splatting (3DGS) Interactive Viewer
 
 > **차세대 볼류메트릭 렌더링 포맷(3DGS) 기반 실시간 WebXR 6DoF 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 / Three.js 하이브리드 파이프라인과 시공간 3D 메타데이터 핀(POI)을 결합하여, 브라우저 및 Meta Quest 환경에서 60~90 FPS의 안정적인 공간 탐색을 제공합니다.
 
 ---
 
-## 📌 1. 프로젝트 개요 (Overview)
+## 1. 프로젝트 개요 (Overview)
 
 * **개발 기간**: 2026.09
 * **수행 형태**: 개인 프로젝트 (연구개발 포트폴리오)
@@ -18,7 +18,7 @@
 
 ---
 
-## 🎯 2. 문제 의식 (Problem Statement)
+## 2. 문제 의식 (Problem Statement)
 
 1. **전통적인 3D 폴리곤 메시의 한계**:
    - 벚꽃 잎사귀 수천 장, 나뭇가지, 거친 조약돌 요철 등 고주파 미세 형상(High-Frequency Geometry)을 표현하려면 수백만 개의 삼각형 폴리곤과 고해상도 텍스처가 요구되어 실시간 렌더링 부하가 급증하고 실물감이 저하됨.
@@ -30,7 +30,7 @@
 
 ---
 
-## 🏗️ 3. 시스템 아키텍처 (System Architecture)
+## 3. 시스템 아키텍처 (System Architecture)
 
 ```mermaid
 flowchart TB
@@ -69,7 +69,7 @@ flowchart TB
 
 ---
 
-## 🛠️ 4. 핵심 트러블슈팅 & 공간 기하학적 해결 (Deep Troubleshooting)
+## 4. 핵심 트러블슈팅 및 공간 기하학적 해결 (Deep Troubleshooting)
 
 ### 1) 3DGS 좌표계 역전 및 2단계 틸트(19.42° & 11.17°) 쿼터니언 정합
 * **문제 현상**:
@@ -102,9 +102,9 @@ flowchart TB
 
 ---
 
-## 🎮 5. 조작 가이드 (Controls)
+## 5. 조작 가이드 (Controls)
 
-### 🖥️ 데스크톱 웹 환경
+### 데스크톱 웹 환경
 | 입력 | 동작 |
 | :--- | :--- |
 | **마우스 좌클릭 드래그** | 씬 360° 궤도 회전 (Orbit Rotation) |
@@ -112,9 +112,9 @@ flowchart TB
 | **마우스 휠 스크롤** | 카메라 확대 / 축소 (Zoom In / Out) |
 | **마우스 좌클릭 (3D 핀 조준)** | 해당 핀의 시공간 메타데이터 카드 팝업 표시 |
 | **상단 드롭다운 / 파일 열기** | 프리셋 모델 전환 (`Bonsai`, `Dragon`) 및 로컬 3DGS 파일 로드 |
-| **우측 상단 ⚙️ 튜닝 버튼** | GPU 실시간 렌더 튜닝 드로어 패널 토글 |
+| **우측 상단 튜닝 버튼** | GPU 실시간 렌더 튜닝 드로어 패널 토글 |
 
-### 🥽 Meta Quest (WebXR 6DoF) 환경
+### Meta Quest (WebXR 6DoF) 환경
 | 컨트롤러 입력 | 동작 |
 | :--- | :--- |
 | **왼손 썸스틱 (Left Thumbstick)** | 부드러운 전후좌우 보행 이동 (Smooth Locomotion) |
@@ -125,7 +125,7 @@ flowchart TB
 
 ---
 
-## 🚀 6. 로컬 실행 가이드 (Quick Start)
+## 6. 로컬 실행 가이드 (Quick Start)
 
 본 프로젝트는 특정 네트워크망이나 외부 백엔드 서버에 의존하지 않는 **100% 독립형 SPA** 구조로 제작되었습니다.
 
@@ -154,7 +154,7 @@ npm run build
 
 ---
 
-## 📁 7. 디렉토리 구조 (Repository Layout)
+## 7. 디렉토리 구조 (Repository Layout)
 
 ```
 WebXR_3DGS/
@@ -181,7 +181,7 @@ WebXR_3DGS/
 
 ---
 
-## 👨‍💻 Author & Contact
+## Author & Contact
 
 * **개발자**: 김정현 (Technical Artist 지망)
 * **GitHub**: [kimhohyeon0324](https://github.com/kimhohyeon0324)
