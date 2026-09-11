@@ -3,6 +3,12 @@
 > **차세대 볼류메트릭 렌더링 포맷(3DGS) 기반 실시간 WebXR 6DoF 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 / Three.js 하이브리드 파이프라인과 시공간 3D 메타데이터 핀(POI)을 결합하여, 브라우저 및 Meta Quest 환경에서 60~90 FPS의 안정적인 공간 탐색을 제공합니다.
 
+[![Three.js](https://img.shields.io/badge/Three.js-r160-black.svg)](https://threejs.org/)
+[![WebXR](https://img.shields.io/badge/WebXR-Meta%20Quest%202%2F3%2FPro-blue.svg)](https://immersiveweb.dev/)
+[![WebGL 2.0](https://img.shields.io/badge/WebGL-2.0-990000.svg)](https://www.khronos.org/webgl/)
+[![Vite](https://img.shields.io/badge/Vite-5.x-646CFF.svg)](https://vitejs.dev/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 ---
 
 ### 메인 뷰어 실행 화면 (Viewer Showcase)
@@ -15,9 +21,6 @@
 
 ## 1. 프로젝트 개요 (Overview)
 
-* **개발 기간**: 2026.09
-* **수행 형태**: 개인 프로젝트 (연구개발 포트폴리오)
-* **목표 포지션**: 게임 및 인터랙티브 XR 테크니컬 아티스트 (Technical Artist, TA)
 * **기술 스택**: 
   - **Core**: WebGL 2.0, WebXR Device API, JavaScript (ES6+ Module)
   - **3D Engine & Splatting**: Three.js (r160), `@mkkellogg/gaussian-splats-3d` (v0.4.7)
@@ -79,17 +82,16 @@ flowchart TB
 
 ## 4. 핵심 트러블슈팅 및 공간 기하학적 해결 (Deep Troubleshooting)
 
-### 1) 3DGS 좌표계 역전 및 2단계 틸트(19.42° & 11.17°) 쿼터니언 정합
+### 1) 3DGS 좌표계 역전 및 2단계 틸트 쿼터니언 정합
 * **문제 현상**:
-  - 원본 3DGS 모델(`bonsai_trimmed.ksplat`)은 COLMAP 사진 측량 좌표계(OpenCV Y-Down)로 캡처되어 Three.js(Y-Up) 공간에서 180° 뒤집혀 있었으며, 테이블 받침대가 지면 대비 우측으로 심하게 기울어져 허공에 떠 있는 결함 발생.
+  - 원본 3DGS 모델(`bonsai_trimmed.ksplat`)은 COLMAP 사진 측량 좌표계(OpenCV Y-Down)로 캡처되어 Three.js(Y-Up) 공간에서 180° 반전되어 있었으며, 촬영 시 삼각대 정렬 오차로 인해 테이블 받침대가 지면 대비 비스듬히 기울어져 허공에 뜨는 결함 발생.
 * **원인 분석**:
-  - 포인트 클라우드 실측 결과, 촬영 당시 중력축과 카메라 정렬 오차로 인해 테이블 상판의 법선 벡터가 `(-0.149, -0.677, -0.721)`로 틀어져 있었음.
+  - 포인트 클라우드 실측 결과, 중력축과 카메라 정렬 오차로 인해 테이블 상판의 법선 벡터가 `(-0.15, -0.68, -0.72)` 방향으로 기울어짐.
 * **기하학적 해결**:
-  1. 테이블 상판 및 화분 목재 좌대 영역(1,263개 포인트)에 대해 RANSAC 평면 피팅을 수행하여 실제 표면 법선 $N_{surface}$을 추출.
-  2. 표면 법선을 월드 천장 벡터 $(0, 1, 0)$에 일치시키는 교정 쿼터니언 $Q_{align} = \text{setFromUnitVectors}(N_{surface}, \vec{u}_{up})$ 합성:
-     $$\mathbf{q} = [0.917140, -0.187314, 0.018722, 0.351307]$$
-  3. 회전 후 모델 최하단(테이블 천 끝자락)의 높이($-1.926m$)를 바닥 격자 $y=0.00m$에 접지시키고, XZ 중심을 보정한 오프셋 $\mathbf{t} = [0.032, 1.926, 0.055]$ 적용.
-  - **결과**: 테이블 상판이 지면과 오차 0.00°로 완벽한 수평을 이루고, 기둥 최하단이 바닥 격자에 수직으로 정확히 안착함.
+  1. 테이블 상판 및 좌대 영역 포인트군에 RANSAC 평면 피팅을 적용하여 실제 표면 법선($\vec{N}_{surface}$) 추출.
+  2. 표면 법선을 월드 천장 벡터($\vec{u}_{up}$)에 일치시키는 회전 쿼터니언($Q_{align} = \text{setFromUnitVectors}(\vec{N}_{surface}, \vec{u}_{up})$)을 합성하여 틸트 각도를 오차 0.00°로 보정.
+  3. 회전 후 모델의 바운딩 박스를 재계산하여 최하단을 지면 격자($y=0.00m$)에 정확히 접지시키고 XZ 중심 정렬 오프셋 적용.
+  - **결과**: 테이블 상판이 가상 지면과 완벽한 수평을 이루고, 기둥 하단이 바닥 격자에 수직으로 자연스럽게 안착.
 
 ### 2) 반투명 가우시안과 불투명 Three.js 메쉬 간의 뎁스 정합 및 피킹
 * **문제 현상**:
@@ -162,35 +164,9 @@ npm run build
 
 ---
 
-## 7. 디렉토리 구조 (Repository Layout)
-
-```
-WebXR_3DGS/
-├── index.html              # 메인 HTML 및 모던 HUD 오버레이 마크업
-├── package.json            # Three.js, gaussian-splats-3d, basic-ssl 의존성
-├── vite.config.js          # HTTPS 자체 서명 및 Cross-Origin 격리 헤더 설정
-├── .gitignore              # node_modules, dist, 시크릿 보호 파일 제외 설정
-├── public/
-│   └── models/             # 3DGS 프리셋 에셋 (bonsai_trimmed.ksplat, dragon.splat)
-└── src/
-    ├── main.js             # 애플리케이션 엔트리포인트 및 프리셋 트랜스폼 매핑
-    ├── style.css           # HUD, 드로어, 팝업 카드 반응형 CSS
-    ├── core/
-    │   ├── Engine.js       # Three.js 씬과 3DGS 통합 오케스트레이션 엔진
-    │   ├── SplatManager.js # 3DGS 코어 로더, 래스터라이저 및 튜닝 API 관리자
-    │   ├── WebXRManager.js # WebXR 세션 라이프사이클 및 Stereo Camera Rig 바인딩
-    │   ├── XRInteractionManager.js # 6DoF 텔레포트, 스틱 이동, 스냅턴, 햅틱 피드백
-    │   └── POIManager.js   # 3D 메타데이터 핀 배치, 애니메이션 및 레이캐스팅 피킹
-    └── ui/
-        ├── OverlayUI.js    # HUD 메뉴, 프리셋 선택, 튜닝 드로어 슬라이더 연동
-        ├── POICard.js      # POI 선택 시 노출되는 반응형 3D 메타데이터 팝업 카드
-        └── LoadingIndicator.js # 버퍼 파싱 및 스트리밍 진행률 표시 인디케이터
-```
-
----
-
 ## Author & Contact
 
-* **개발자**: 김정현 (Technical Artist 지망)
+* **개발자**: 김정현
 * **GitHub**: [kimhohyeon0324](https://github.com/kimhohyeon0324)
 * **저장소 링크**: [WebXR-3DGS-Viewer](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer)
+* **License**: MIT
