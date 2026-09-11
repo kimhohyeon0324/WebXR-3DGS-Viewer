@@ -31,12 +31,12 @@
 
 ## 2. 문제 의식
 
-1. **독립형 모바일 VR 단말(Meta Quest)의 렌더링 병목**:
-   - 3DGS는 PC 고성능 GPU에서는 빠르지만, 수십만 개의 반투명 타원체가 중첩되는 특성상 Meta Quest(Snapdragon XR2)와 같은 모바일 TBDR(타일 기반 지연 렌더러) 구조에서는 심각한 알파 오버드로우(Alpha Overdraw)와 필레이트(Fill-rate) 포화가 발생하여 프레임이 급락함.
-2. **실시간 시점 정렬(Sorting) 연산의 메인 스레드 블로킹**:
-   - 카메라 뷰에 따라 수십만 개의 가우시안 중심점을 매 프레임 깊이순으로 정렬해야 하며, 이를 메인 스레드에서 처리할 경우 화면 끊김(Jank)과 극심한 VR 멀미를 유발함.
-3. **WebXR 기반 6DoF 공간 인터랙션 파이프라인의 부재**:
-   - 기존의 웹 기반 3DGS 뷰어들은 주로 마우스 궤도 회전에 국한되어, 독립형 HMD 환경에서의 양안 스테레오 렌더 루프 및 6DoF 컨트롤러 인터랙션(부드러운 보행, 스냅턴, 텔레포트, 양손 공간 스케일)을 통합한 실시간 시스템이 부족함.
+1. **모바일 VR 기기(Meta Quest)의 렌더링 과부하**:
+   - 3DGS는 고성능 PC에서는 빠르지만, 수십만 개의 반투명 입자가 겹쳐 렌더링되는 특성상 Meta Quest와 같은 모바일 VR 기기에서는 화면을 덧칠하는 연산량(오버드로우)이 급증하여 프레임이 급격히 떨어지는 한계가 있음.
+2. **실시간 시점 정렬 연산으로 인한 화면 끊김**:
+   - 사용자 시점 변화에 맞춰 수십만 개의 입자를 앞뒤 순서대로 매 프레임 정렬해야 하는데, 이를 브라우저 메인 스레드에서 처리하면 화면이 뚝뚝 끊기며 심한 VR 멀미를 유발함.
+3. **WebXR 기반 6DoF 공간 조작 환경의 부재**:
+   - 기존 웹 기반 3DGS 뷰어들은 대부분 마우스 회전 수준에 머물러 있어, VR 헤드셋 환경에서 자유롭게 걸어 다니거나 텔레포트하고, 양손으로 공간 크기를 조절하는 통합 조작 시스템이 부족함.
 
 ---
 
@@ -50,7 +50,7 @@ flowchart TB
 
     subgraph Core["2. 렌더링 파이프라인"]
         SM["SplatManager\n(@mkkellogg/gaussian-splats-3d)"]
-        WASM["Web Worker WASM Radix Sort\n(SharedArrayBuffer 멀티스레드 정렬)"]
+        WASM["Web Worker WASM Radix Sort\n(백그라운드 멀티스레드 정렬)"]
         GPU["WebGL2 Float Texture 버퍼 바인딩\n& 인스턴스 래스터라이제이션"]
         TScene["Three.js 씬 그래프\n(가상 공간 바닥 그리드, 조명)"]
     end
@@ -58,7 +58,7 @@ flowchart TB
     subgraph Interaction["3. WebXR 6DoF 인터랙션"]
         WXR["WebXRManager\n(Stereo Camera Rig, 6DoF Controllers)"]
         XRIM["XRInteractionManager\n(텔레포트, 부드러운 보행, 양손 스케일/회전)"]
-        UI["OverlayUI & GPU Tuning HUD\n(Splat Scale, Alpha Cutoff 실시간 제어)"]
+        UI["OverlayUI & GPU Tuning HUD\n(입자 크기, 투명도 실시간 조절)"]
     end
 
     PLY --> SM
@@ -79,24 +79,24 @@ flowchart TB
 
 ## 4. 핵심 트러블슈팅 및 최적화
 
-### 1) 모바일 HMD(Meta Quest)를 위한 GPU 알파 오버드로우 최적화
+### 1) 모바일 HMD(Meta Quest)를 위한 GPU 연산 부하 최적화
 * **문제 현상**:
-  - Meta Quest의 내장 GPU(Snapdragon XR2)는 반투명 쿼드 중첩(Alpha Overdraw)에 매우 취약하여, 스테레오 렌더링 시 필레이트 병목으로 인해 프레임이 급락하는 현상 발생.
+  - Meta Quest의 모바일 프로세서는 반투명 입자가 여러 겹 겹치는 화면 덧칠 연산에 취약하여, 양안 VR 렌더링 시 프레임이 45fps 이하로 급락하는 현상 발생.
 * **해결 방법**:
-  - **Alpha Cutoff 조기 프루닝**: 시각적 기여도가 미미한 저밀도 투명 가우시안을 조기에 기각(Discard)하여 픽셀 셰이더 연산 부하를 30% 이상 절감.
-  - **Splat Scale 반경 압축**: 개별 가우시안 타원체의 반경을 미세 축소하여 쿼드 간 중첩 면적을 최소화하고 타일 메모리 대역폭을 확보.
-  - **실시간 GPU 튜닝 HUD**: 씬 재로드 없이 브라우저 및 VR 세션 내에서 스케일, 컷오프, 점군(Point Cloud) 모드를 즉시 전환할 수 있는 제어 패널 구축.
+  - **투명 가우시안 계산 제외 (Alpha Cutoff)**: 형태에 거의 영향을 주지 않는 흐릿하고 투명한 입자들을 렌더링 계산에서 미리 제외하여 연산량을 30% 이상 절감.
+  - **입자 크기 미세 조절 (Splat Scale)**: 개별 입자의 크기를 살짝 줄여 입자들끼리 겹치는 면적을 줄이고 그래픽 메모리 대역폭 부담을 완화.
+  - **실시간 GPU 튜닝 패널**: 새로고침 없이 화면에서 입자 크기, 투명도 컷오프, 점군(Point Cloud) 모드를 즉시 조절하며 최적의 프레임을 찾을 수 있는 UI 구축.
 
 | 실시간 GPU 렌더 튜닝 & 최적화 HUD 패널 |
 | :---: |
 | ![GPU Tuning HUD](docs/images/gpu_tuning_hud.png) |
 
-### 2) SharedArrayBuffer 기반 WASM 정렬과 WebXR 스테레오 루프 통합
+### 2) 백그라운드 멀티스레드 정렬과 WebXR 스테레오 루프 통합
 * **문제 현상**:
-  - 수십만 개 가우시안의 깊이 정렬(Sorting)을 자바스크립트 메인 스레드에서 수행할 시 프레임 드랍이 발생하며, 브라우저 보안 정책상 멀티스레딩(`SharedArrayBuffer`)이 기본 차단됨.
+  - 수십만 개 입자의 앞뒤 순서를 정렬하는 무거운 연산을 웹 브라우저 메인 스레드에서 돌리면 화면 멈춤이 발생하고, 브라우저 보안 규정상 백그라운드 멀티스레드(`SharedArrayBuffer`) 사용이 기본 차단되어 있음.
 * **해결 방법**:
-  - Vite 개발/프로덕션 서버에 `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp` 보안 격리 헤더를 적용하여 Web Worker 간 `SharedArrayBuffer` 기반 WASM Radix Sort 파이프라인 활성화.
-  - 일반 데스크톱 단일 뷰포트 루프와 WebXR 스테레오 좌/우안 루프를 매끄럽게 전환하여 60~90 FPS의 안정적인 프레임 페이싱 방어.
+  - Vite 서버에 필수 보안 격리 헤더(COOP/COEP)를 설정하여, 백그라운드 워커(Web Worker)에서 고속 정렬 알고리즘(WASM Radix Sort)이 독립적으로 돌도록 멀티스레딩 파이프라인을 활성화.
+  - PC 화면과 VR 헤드셋 양안 화면의 렌더링 주기를 매끄럽게 전환하여, 끊김 없이 안정적인 60~90 FPS를 유지.
 
 ---
 
