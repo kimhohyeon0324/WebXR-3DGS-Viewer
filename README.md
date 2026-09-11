@@ -87,6 +87,10 @@ flowchart TB
   - **Splat Scale 반경 압축**: 개별 가우시안 타원체의 반경을 미세 축소하여 쿼드 간 중첩 면적을 최소화하고 타일 메모리 대역폭을 확보.
   - **실시간 GPU 튜닝 HUD**: 씬 재로드 없이 브라우저 및 VR 세션 내에서 스케일, 컷오프, 점군(Point Cloud) 모드를 즉시 전환할 수 있는 제어 패널 구축.
 
+| 실시간 GPU 렌더 튜닝 & 최적화 HUD 패널 |
+| :---: |
+| ![GPU Tuning HUD](docs/images/gpu_tuning_hud.png) |
+
 ### 2) SharedArrayBuffer 기반 WASM 정렬과 WebXR 스테레오 루프 통합
 * **문제 현상**:
   - 수십만 개 가우시안의 깊이 정렬(Sorting)을 자바스크립트 메인 스레드에서 수행할 시 프레임 드랍이 발생하며, 브라우저 보안 정책상 멀티스레딩(`SharedArrayBuffer`)이 기본 차단됨.
@@ -135,8 +139,6 @@ npm run dev
   ➜  Local:   https://localhost:5173/
   ➜  Network: https://<현재-PC-IP>:5173/
   ```
-- **PC 접속**: 브라우저에서 `https://localhost:5173/` 접속.
-- **Meta Quest 접속**: PC와 동일한 Wi-Fi에 퀘스트를 연결한 후, 오큘러스 브라우저 주소창에 `https://<현재-PC-IP>:5173/` 입력 후 하단 **'ENTER VR'** 클릭.
 
 ### 3) 프로덕션 빌드
 ```bash
@@ -146,9 +148,40 @@ npm run build
 
 ---
 
+## 7. Meta Quest 접속 가이드
+
+1. **동일한 로컬 네트워크(Wi-Fi) 연결**:
+   - 서버를 구동 중인 PC와 Meta Quest 헤드셋이 **반드시 같은 공유기(Wi-Fi)**에 연결되어 있어야 합니다.
+2. **Quest 브라우저에서 접속**:
+   - 헤드셋을 착용하고 오큘러스 브라우저 주소창에 터미널에 출력된 IP 주소를 입력합니다:
+     ```
+     https://<PC_로컬_IP>:5173
+     ```
+3. **자체 서명 SSL 인증서 승인 (최초 1회 필수)**:
+   - WebXR 구동을 위해서는 HTTPS 보안 컨텍스트가 필수입니다.
+   - 첫 접속 시 *"연결이 비공개로 설정되어 있지 않습니다"* 경고가 표시될 경우, 화면 하단의 **[고급(Advanced)]** 클릭 후 **[<PC_IP> (안전하지 않음)으로 이동]**을 선택하여 승인합니다.
+4. **VR 진입**:
+   - 화면 우측 상단의 **`ENTER VR`** 버튼을 클릭하여 몰입형 3DGS 6DoF 세션으로 진입합니다.
+
+---
+
+## 8. 외부 에셋 라이선스
+
+프로젝트에 활용된 3DGS 에셋은 연구 및 교육 목적의 공공 벤치마크 데이터셋입니다:
+
+* **Bonsai Tree Scene (`.ksplat`)**:
+  - **출처**: [Mip-NeRF 360 Dataset](https://jonbarron.info/mipnerf360/) (Barron et al., CVPR 2022) 및 [3D Gaussian Splatting](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/) (Kerbl et al., SIGGRAPH 2023)
+  - **라이선스**: 연구 및 비상업적 교육용 (Non-Commercial Research)
+* **Golden Dragon Scene (`.splat`)**:
+  - **출처**: [Stanford 3D Scanning Repository](http://graphics.stanford.edu/data/3Dscanrep/) (Stanford Computer Graphics Laboratory)
+  - **라이선스**: 연구 및 교육용 (Research & Educational Use)
+
+---
+
 ## Author & Contact
 
 * **개발자**: 김호현
 * **GitHub**: [kimhohyeon0324](https://github.com/kimhohyeon0324)
 * **저장소 링크**: [WebXR-3DGS-Viewer](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer)
 * **License**: MIT
+
