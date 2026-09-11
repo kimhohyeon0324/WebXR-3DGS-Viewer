@@ -180,10 +180,8 @@ npm run build
 
 ---
 
-## Author & Contact
+## 라이선스
 
-* **개발자**: 김호현
-* **GitHub**: [kimhohyeon0324](https://github.com/kimhohyeon0324)
-* **저장소 링크**: [WebXR-3DGS-Viewer](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer)
-* **License**: MIT
+본 프로젝트의 소스코드는 [MIT License](LICENSE)를 따릅니다.
+
 
