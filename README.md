@@ -1,6 +1,6 @@
 # WebXR 3D Gaussian Splatting (3DGS) Interactive Viewer
 
-> **차세대 볼류메트릭 렌더링 포맷(3DGS) 기반 실시간 WebXR 6DoF 인터랙티브 뷰어 시스템**  
+> **3D 가우시안 스플래팅 기반 실시간 WebXR 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 / Three.js 하이브리드 파이프라인과 시공간 3D 메타데이터 핀(POI)을 결합하여, 브라우저 및 Meta Quest 환경에서 60~90 FPS의 안정적인 공간 탐색을 제공합니다.
 
 [![Three.js](https://img.shields.io/badge/Three.js-r160-black.svg)](https://threejs.org/)
