@@ -5,6 +5,14 @@
 
 ---
 
+### 메인 뷰어 실행 화면 (Viewer Showcase)
+
+| Bonsai Tree (경량 .ksplat 씬 & 3D POI 정합) | Golden Dragon (.splat 씬 & 지면 안착) |
+| :---: | :---: |
+| ![Bonsai Tree Scene](docs/images/showcase_bonsai.png) | ![Golden Dragon Scene](docs/images/showcase_dragon.png) |
+
+---
+
 ## 1. 프로젝트 개요 (Overview)
 
 * **개발 기간**: 2026.09
