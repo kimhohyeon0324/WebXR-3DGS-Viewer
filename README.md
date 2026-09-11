@@ -184,4 +184,5 @@ WebXR_3DGS/
 ## 👨‍💻 Author & Contact
 
 * **개발자**: 김정현 (Technical Artist 지망)
-* **연락처**: [GitHub Profile](https://github.com/) / Portfolio Notion Link
+* **GitHub**: [kimhohyeon0324](https://github.com/kimhohyeon0324)
+* **저장소 링크**: [WebXR-3DGS-Viewer](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer)
