@@ -1,0 +1,34 @@
+# 의존성 패키지
+node_modules/
+
+# 프로덕션 빌드 산출물
+dist/
+dist-ssr/
+
+# 환경 변수 및 시크릿
+.env
+.env.local
+.env.*.local
+
+# 로그 파일
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS 생성 임시 파일
+.DS_Store
+Thumbs.db
+
+# IDE 및 에디터 설정
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 로컬 개발 및 테스트 임시 파일
+test.html

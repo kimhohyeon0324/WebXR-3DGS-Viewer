@@ -1,0 +1,180 @@
+/**
+ * 뷰어 HUD 및 사용자 인터랙션 오버레이 관리자
+ */
+export class OverlayUI {
+  /**
+   * @param {Object} options
+   * @param {Function} options.onModelSelect - 프리셋 선택 콜백 (presetKey)
+   * @param {Function} options.onFileLoad - 로컬 파일 로드 콜백 (File)
+   * @param {Function} options.onResetView - 시점 리셋 콜백
+   * @param {Function} [options.onSplatScaleChange] - 스플랫 크기 변경 콜백
+   * @param {Function} [options.onAlphaCutoffChange] - 알파 컷오프 변경 콜백
+   * @param {Function} [options.onPointCloudToggle] - 포인트 클라우드 모드 토글
+   */
+  constructor(options = {}) {
+    this.onModelSelect = options.onModelSelect || (() => {});
+    this.onFileLoad = options.onFileLoad || (() => {});
+    this.onResetView = options.onResetView || (() => {});
+    this.onSplatScaleChange = options.onSplatScaleChange || (() => {});
+    this.onAlphaCutoffChange = options.onAlphaCutoffChange || (() => {});
+    this.onPointCloudToggle = options.onPointCloudToggle || (() => {});
+
+    this.modelSelect = document.getElementById('model-select');
+    this.fileInput = document.getElementById('file-input');
+    this.btnResetCam = document.getElementById('btn-reset-cam');
+    this.dropOverlay = document.getElementById('drop-zone-overlay');
+    this.splatCountDisplay = document.getElementById('splat-count-display');
+    this.formatDisplay = document.getElementById('format-display');
+    this.vrActiveBadge = document.getElementById('vr-active-badge');
+
+    // 튜닝 드로어 요소
+    this.btnSettingsToggle = document.getElementById('btn-settings-toggle');
+    this.btnSettingsClose = document.getElementById('btn-settings-close');
+    this.settingsPanel = document.getElementById('settings-panel');
+    this.sliderSplatScale = document.getElementById('slider-splat-scale');
+    this.labelSplatScale = document.getElementById('label-splat-scale');
+    this.sliderAlphaCutoff = document.getElementById('slider-alpha-cutoff');
+    this.labelAlphaCutoff = document.getElementById('label-alpha-cutoff');
+    this.togglePointCloud = document.getElementById('toggle-point-cloud');
+
+    this.initEventListeners();
+    this.initDragAndDrop();
+    this.initSettingsPanel();
+  }
+
+  initEventListeners() {
+    if (this.modelSelect) {
+      this.modelSelect.addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val !== 'custom') {
+          this.onModelSelect(val);
+        }
+      });
+    }
+
+    if (this.fileInput) {
+      this.fileInput.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          if (this.modelSelect) this.modelSelect.value = 'custom';
+          this.onFileLoad(file);
+        }
+      });
+    }
+
+    if (this.btnResetCam) {
+      this.btnResetCam.addEventListener('click', () => {
+        this.onResetView();
+      });
+    }
+  }
+
+  initSettingsPanel() {
+    if (this.btnSettingsToggle && this.settingsPanel) {
+      this.btnSettingsToggle.addEventListener('click', () => {
+        this.settingsPanel.classList.toggle('hidden');
+      });
+    }
+
+    if (this.btnSettingsClose && this.settingsPanel) {
+      this.btnSettingsClose.addEventListener('click', () => {
+        this.settingsPanel.classList.add('hidden');
+      });
+    }
+
+    if (this.sliderSplatScale) {
+      this.sliderSplatScale.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (this.labelSplatScale) this.labelSplatScale.textContent = `${val.toFixed(2)}x`;
+        this.onSplatScaleChange(val);
+      });
+    }
+
+    if (this.sliderAlphaCutoff) {
+      this.sliderAlphaCutoff.addEventListener('change', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (this.labelAlphaCutoff) this.labelAlphaCutoff.textContent = `${val}`;
+        this.onAlphaCutoffChange(val);
+      });
+    }
+
+    if (this.togglePointCloud) {
+      this.togglePointCloud.addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        this.onPointCloudToggle(checked);
+      });
+    }
+  }
+
+  initDragAndDrop() {
+    let dragCounter = 0;
+
+    window.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      if (this.dropOverlay) {
+        this.dropOverlay.classList.remove('hidden');
+      }
+    });
+
+    window.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        if (this.dropOverlay) {
+          this.dropOverlay.classList.add('hidden');
+        }
+      }
+    });
+
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      if (this.dropOverlay) {
+        this.dropOverlay.classList.add('hidden');
+      }
+
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (['ply', 'splat', 'ksplat'].includes(ext)) {
+          if (this.modelSelect) this.modelSelect.value = 'custom';
+          this.onFileLoad(file);
+        } else {
+          alert('지원되지 않는 파일 형식입니다. .splat, .ksplat, .ply 파일만 가능합니다.');
+        }
+      }
+    });
+  }
+
+  /**
+   * 하단 씬 메타데이터 정보 갱신
+   */
+  updateSceneInfo({ splatCount, format }) {
+    if (this.splatCountDisplay) {
+      this.splatCountDisplay.textContent = Number(splatCount).toLocaleString();
+    }
+    if (this.formatDisplay) {
+      this.formatDisplay.textContent = format || 'N/A';
+    }
+  }
+
+  /**
+   * WebXR 활성화 상태 배지 토글
+   */
+  setVRActive(isActive) {
+    if (this.vrActiveBadge) {
+      if (isActive) {
+        this.vrActiveBadge.classList.remove('hidden');
+      } else {
+        this.vrActiveBadge.classList.add('hidden');
+      }
+    }
+  }
+}
