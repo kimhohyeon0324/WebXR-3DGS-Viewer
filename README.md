@@ -167,13 +167,15 @@ npm run build
 
 ## 8. 외부 에셋 라이선스
 
-프로젝트에 활용된 3DGS 에셋은 연구 및 교육 목적의 공공 벤치마크 데이터셋입니다:
+프로젝트에 활용된 3DGS 모델 에셋은 [Hugging Face (`aswathselvam/splats`)](https://huggingface.co/aswathselvam/splats) 저장소에서 배포된 웹 최적화 샘플을 사용하였으며, 각 씬의 원본 데이터셋 출처는 다음과 같습니다:
 
 * **Bonsai Tree Scene (`.ksplat`)**:
-  - **출처**: [Mip-NeRF 360 Dataset](https://jonbarron.info/mipnerf360/) (Barron et al., CVPR 2022) 및 [3D Gaussian Splatting](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/) (Kerbl et al., SIGGRAPH 2023)
+  - **호스팅 출처**: [Hugging Face `aswathselvam/splats`](https://huggingface.co/aswathselvam/splats/blob/main/bonsai_trimmed.ksplat)
+  - **원본 데이터셋**: [Mip-NeRF 360 Dataset](https://jonbarron.info/mipnerf360/) (Barron et al., CVPR 2022) / [3D Gaussian Splatting](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/) (Kerbl et al., SIGGRAPH 2023)
   - **라이선스**: 연구 및 비상업적 교육용 (Non-Commercial Research)
 * **Golden Dragon Scene (`.splat`)**:
-  - **출처**: [Stanford 3D Scanning Repository](http://graphics.stanford.edu/data/3Dscanrep/) (Stanford Computer Graphics Laboratory)
+  - **호스팅 출처**: [Hugging Face `aswathselvam/splats`](https://huggingface.co/aswathselvam/splats/blob/main/dragon.splat)
+  - **원본 데이터셋**: [Stanford 3D Scanning Repository](http://graphics.stanford.edu/data/3Dscanrep/) (Stanford Computer Graphics Laboratory)
   - **라이선스**: 연구 및 교육용 (Research & Educational Use)
 
 ---
