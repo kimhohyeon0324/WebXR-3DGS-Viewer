@@ -1,4 +1,4 @@
-# WebXR 3D Gaussian Splatting (3DGS) Interactive Viewer
+# WebXR_3DGS: 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어
 
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 60~90 FPS의 안정적인 공간 탐색과 6DoF 인터랙션을 제공합니다.
@@ -121,7 +121,7 @@ flowchart TB
 
 ---
 
-## 6. 로컬 실행 가이드
+## 6. 빠른 시작
 
 본 프로젝트는 특정 네트워크망이나 외부 백엔드 서버에 의존하지 않는 **100% 독립형 SPA** 구조로 제작되었습니다.
 
