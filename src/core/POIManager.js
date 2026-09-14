@@ -303,6 +303,26 @@ export class POIManager {
     return this._checkIntersections();
   }
 
+  /**
+   * 레이저가 POI 핀을 조준하고 있는지 비파괴 검사 (Hover 감지용)
+   */
+  checkRayHover(origin, direction) {
+    this.raycaster.set(origin, direction);
+    const hitBoxes = [];
+    for (const pin of this.pins) {
+      for (const child of pin.children) {
+        if (child.userData?.isPOIHitBox) {
+          hitBoxes.push(child);
+        }
+      }
+    }
+    const intersects = this.raycaster.intersectObjects(hitBoxes, false);
+    if (intersects.length > 0) {
+      return intersects[0].object.userData.pinRef || null;
+    }
+    return null;
+  }
+
   _checkIntersections() {
     const hitBoxes = [];
     for (const pin of this.pins) {
