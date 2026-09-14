@@ -161,8 +161,19 @@ export class WebXRManager {
   setupControllers() {
     for (let i = 0; i < 2; i++) {
       const controller = this.renderer.xr.getController(i);
-      controller.name = `controller_${i === 0 ? 'right' : 'left'}`;
       this.cameraRig.add(controller);
+
+      // WebXR 세션에서 컨트롤러가 연결될 때 handedness ('left' | 'right') 정확히 바인딩
+      controller.addEventListener('connected', (event) => {
+        controller.userData.handedness = event.data.handedness;
+        controller.userData.inputSource = event.data;
+        console.log(`[WebXRManager] Controller ${i} connected as handedness: ${event.data.handedness}`);
+      });
+
+      controller.addEventListener('disconnected', () => {
+        controller.userData.handedness = null;
+        controller.userData.inputSource = null;
+      });
 
       const laserGeometry = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, 0),
@@ -181,7 +192,7 @@ export class WebXRManager {
       this.controllers.push(controller);
 
       const grip = this.renderer.xr.getControllerGrip(i);
-      grip.name = `grip_${i === 0 ? 'right' : 'left'}`;
+      grip.name = `grip_${i}`;
       grip.add(this.controllerModelFactory.createControllerModel(grip));
       this.cameraRig.add(grip);
 

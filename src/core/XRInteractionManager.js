@@ -172,32 +172,39 @@ export class XRInteractionManager {
     const session = this.renderer?.xr?.getSession();
     if (!session) return;
 
-    let leftGamepad = null;
-    let rightGamepad = null;
+    // 1. 각 컨트롤러의 handedness에 맞추어 leftController, rightController 및 트리거 상태 정확히 매핑
+    let leftController = null;
+    let rightController = null;
+    let leftTrigger = false;
+    let rightTrigger = false;
 
-    for (const source of session.inputSources) {
-      if (source && source.gamepad) {
-        if (source.handedness === 'left') leftGamepad = source.gamepad;
-        else if (source.handedness === 'right') rightGamepad = source.gamepad;
+    for (let i = 0; i < this.controllers.length; i++) {
+      const ctrl = this.controllers[i];
+      // connected 이벤트의 handedness 우선 확인, 없으면 인덱스 폴백
+      const handedness = ctrl.userData?.handedness || (i === 0 ? 'right' : 'left');
+      const gamepad = ctrl.userData?.inputSource?.gamepad ||
+        (session.inputSources ? Array.from(session.inputSources).find(s => s?.handedness === handedness)?.gamepad : null);
+
+      const isTriggerPressed = !!(gamepad?.buttons[0]?.pressed);
+
+      if (handedness === 'left') {
+        leftController = ctrl;
+        leftTrigger = isTriggerPressed;
+      } else if (handedness === 'right') {
+        rightController = ctrl;
+        rightTrigger = isTriggerPressed;
       }
     }
 
-    // 오직 트리거 버튼(buttons[0])만 판정 (그립 버튼 및 썸스틱 완전 제외)
-    const leftTrigger = !!(leftGamepad?.buttons[0]?.pressed);
-    const rightTrigger = !!(rightGamepad?.buttons[0]?.pressed);
-
-    const rightController = this.controllers[0];
-    const leftController = this.controllers[1];
-
     // ==========================================
-    // 1. 양손 트리거: 줌인/줌아웃(스케일) 및 양손 축 회전
+    // 1. 양손 트리거: 오직 '두 손 사이 거리'로만 줌인 / 줌아웃 (회전 간섭 배제)
     // ==========================================
     if (leftTrigger && rightTrigger && leftController && rightController) {
       this.activeGrabController = null;
       this.handleTwoHandZoom(leftController, rightController);
     }
     // ==========================================
-    // 2. 한 손 트리거: 오브젝트 잡고 이동 & 오브젝트 중심 손목 회전
+    // 2. 한 손 트리거: 잡은 '그 손'의 6DoF 움직임 & 손목 회전대로 1:1 이동/회전
     // ==========================================
     else if (rightTrigger && rightController) {
       this.isTwoHandGrabbing = false;
@@ -216,7 +223,7 @@ export class XRInteractionManager {
   }
 
   /**
-   * 한 손 잡기: 손의 6DoF 이동 및 회전에 맞춰 모델이 1:1로 이동 및 '오브젝트 중심'으로 회전
+   * 한 손 잡기: 손의 6DoF 이동 및 손목 회전에 맞춰 모델이 1:1로 이동 및 '오브젝트 중심'으로 회전
    */
   handleOneHandGrab(controller) {
     controller.getWorldPosition(this._currCtrlPos);
@@ -229,11 +236,11 @@ export class XRInteractionManager {
       this.grabStartModelPos.copy(this.modelPosition);
       this.grabStartModelQuat.copy(this.modelQuaternion);
     } else {
-      // 1) 위치 이동 (손이 움직인 만큼 오브젝트 이동)
+      // 1) 위치 이동 (잡은 손이 움직인 만큼 모델 이동)
       this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos);
       this.modelPosition.copy(this.grabStartModelPos).add(this._deltaPos);
 
-      // 2) 회전: 월드 원점이 아닌 오브젝트 자체의 중심을 기준으로 회전 (deltaQuat = Q_curr * Q_start^-1)
+      // 2) 회전 (잡은 손목이 회전한 델타 쿼터니언을 오브젝트 중심에 1:1 적용)
       this._invStartQuat.copy(this.grabStartControllerQuat).invert();
       this._deltaQuat.multiplyQuaternions(this._currCtrlQuat, this._invStartQuat);
       this.modelQuaternion.multiplyQuaternions(this._deltaQuat, this.grabStartModelQuat);
@@ -243,32 +250,24 @@ export class XRInteractionManager {
   }
 
   /**
-   * 양손 줌인/줌아웃: 두 손 사이의 거리를 늘리거나 좁혀서 모델을 오브젝트 중심으로 확대/축소
+   * 양손 줌인/줌아웃: 두 손 사이의 거리로만 모델을 오브젝트 중심으로 확대/축소 (순수 스케일링)
    */
   handleTwoHandZoom(leftController, rightController) {
     leftController.getWorldPosition(this._leftPos);
     rightController.getWorldPosition(this._rightPos);
 
     const currentDistance = this._leftPos.distanceTo(this._rightPos);
-    const currentAngle = Math.atan2(this._rightPos.x - this._leftPos.x, this._rightPos.z - this._leftPos.z);
 
     if (!this.isTwoHandGrabbing) {
       this.isTwoHandGrabbing = true;
       this.initialHandsDistance = currentDistance;
       this.initialModelScale = this.modelScale;
-      this.initialHandsAngle = currentAngle;
-      this.initialHandsModelQuat.copy(this.modelQuaternion);
     } else {
       // 거리 비율로 오브젝트 스케일 조절 (오브젝트 로컬 중심 줌인/줌아웃)
       if (this.initialHandsDistance > 0.05) {
         const ratio = currentDistance / this.initialHandsDistance;
         this.modelScale = Math.max(this.minScale, Math.min(this.maxScale, this.initialModelScale * ratio));
       }
-
-      // 두 손을 잇는 축의 수평 회전량 반영
-      const deltaAngle = currentAngle - this.initialHandsAngle;
-      const rotY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), deltaAngle);
-      this.modelQuaternion.multiplyQuaternions(rotY, this.initialHandsModelQuat);
 
       this.applyTransform();
     }
