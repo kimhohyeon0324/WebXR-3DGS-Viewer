@@ -91,6 +91,7 @@ export class Engine {
       scene: this.scene,
       buttonContainer: this.vrButtonContainer,
       poiManager: this.poiManager,
+      splatManager: this.splatManager,
       onSessionStart: ({ session, cameraRig }) => {
         this.clock.start();
         this.splatManager.enterVR((time, frame) => {

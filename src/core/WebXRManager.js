@@ -23,6 +23,7 @@ export class WebXRManager {
     this.scene = options.scene;
     this.buttonContainer = options.buttonContainer || document.body;
     this.poiManager = options.poiManager || null;
+    this.splatManager = options.splatManager || null;
     this.onSessionStart = options.onSessionStart || (() => {});
     this.onSessionEnd = options.onSessionEnd || (() => {});
 
@@ -88,7 +89,8 @@ export class WebXRManager {
       scene: this.scene,
       controllers: this.controllers,
       targetScene: this.scene,
-      poiManager: this.poiManager
+      poiManager: this.poiManager,
+      splatManager: this.splatManager
     });
 
     // 세션 생명주기 이벤트

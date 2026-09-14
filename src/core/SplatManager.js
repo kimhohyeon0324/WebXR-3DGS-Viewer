@@ -296,4 +296,8 @@ export class SplatManager {
   getCamera() {
     return this.viewer ? this.viewer.camera : null;
   }
+
+  getSplatMesh() {
+    return this.viewer ? this.viewer.splatMesh : null;
+  }
 }
