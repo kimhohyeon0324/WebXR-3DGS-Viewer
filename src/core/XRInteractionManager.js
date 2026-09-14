@@ -58,10 +58,18 @@ export class XRInteractionManager {
     this.minScale = 0.1;
     this.maxScale = 6.0;
 
-    // 한 손 잡기(Grab) 상태
-    this.activeGrabController = null;
-    this.grabStartControllerPos = new THREE.Vector3();
-    this.grabStartModelPos = new THREE.Vector3();
+    this.onModelToggle = options.onModelToggle || null;
+
+    // 1. 마우스 좌클릭 대응: 씬 360° 궤도 회전 (Trigger Drag)
+    this.activeRotateController = null;
+    this.rotateStartCtrlPos = new THREE.Vector3();
+    this.rotateStartCtrlQuat = new THREE.Quaternion();
+    this.rotateStartModelQuat = new THREE.Quaternion();
+
+    // 2. 마우스 우클릭 대응: 위치 이동 (Grip Drag)
+    this.activePanController = null;
+    this.panStartCtrlPos = new THREE.Vector3();
+    this.panStartModelPos = new THREE.Vector3();
 
     // 양손 줌/회전/이동 상태 추적
     this.isTwoHandGrabbing = false;
@@ -74,6 +82,7 @@ export class XRInteractionManager {
 
     // 버튼 디바운싱 & 호버 상태
     this._wasRecenterPressed = false;
+    this._wasPresetPressed = false;
     this._hoveredPins = new Map();
 
     // 임시 연산용 객체 (GC 방지)
@@ -87,6 +96,9 @@ export class XRInteractionManager {
     this._currCtrlPos = new THREE.Vector3();
     this._deltaPos = new THREE.Vector3();
     this._deltaQuat = new THREE.Quaternion();
+    this._invQuat = new THREE.Quaternion();
+    this._orbitEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    this._orbitQuat = new THREE.Quaternion();
     this._tempCamPos = new THREE.Vector3();
     this._tempCamDir = new THREE.Vector3();
     this._tempRayOrigin = new THREE.Vector3();
@@ -263,7 +275,8 @@ export class XRInteractionManager {
 
   activate() {
     this.active = true;
-    this.activeGrabController = null;
+    this.activeRotateController = null;
+    this.activePanController = null;
     this.isTwoHandGrabbing = false;
 
     setTimeout(() => {
@@ -277,12 +290,20 @@ export class XRInteractionManager {
 
   deactivate() {
     this.active = false;
-    this.activeGrabController = null;
+    this.activeRotateController = null;
+    this.activePanController = null;
     this.isTwoHandGrabbing = false;
   }
 
   /**
    * 매 프레임 인터랙션 루프
+   * 데스크톱 웹 환경 1:1 매핑:
+   * - 마우스 좌클릭 드래그 -> 트리거(Trigger) 드래그: 씬 360° 궤도 회전
+   * - 마우스 우클릭 드래그 -> 그립(Grip) 드래그: 카메라/모델 위치 이동
+   * - 마우스 휠 스크롤 -> 썸스틱(Thumbstick) 상/하: 카메라 확대 / 축소
+   * - 3D POI 핀 클릭 -> 레이저 조준 후 트리거 클릭: 핀 정보 카드 열람 / 닫기
+   * - 상단 드롭다운 모델 전환 -> B / Y 버튼: 프리셋 모델 전환
+   * - 시점 리셋 -> A / X 버튼: 시선 정면 눈높이 즉시 복귀
    */
   update(delta = 0.016) {
     if (!this.active) return;
@@ -291,10 +312,15 @@ export class XRInteractionManager {
 
     let leftController = null;
     let rightController = null;
-    let leftGrab = false;
-    let rightGrab = false;
+    let leftTrigger = false;
+    let rightTrigger = false;
+    let leftGrip = false;
+    let rightGrip = false;
     let recenterPressed = false;
     let recenterSource = null;
+    let presetTogglePressed = false;
+    let presetToggleSource = null;
+    let stickZoom = 0;
 
     for (let i = 0; i < this.controllers.length; i++) {
       const ctrl = this.controllers[i];
@@ -303,47 +329,64 @@ export class XRInteractionManager {
       const gamepad = ctrl.userData?.inputSource?.gamepad ||
         (session?.inputSources ? Array.from(session.inputSources).find(s => s?.handedness === handedness)?.gamepad : null);
 
-      // 1) 트리거 감지 (POI 피킹 중이 아닐 때만 잡기 인정)
+      // 1) 마우스 좌클릭 대응: 트리거 감지 (POI 피킹 중이 아닐 때만 360° 궤도 회전으로 인정)
       const triggerEvent = !!ctrl.userData?.isTriggerHeld;
       const triggerGamepad = !ctrl.userData?.isPickingPOI && (gamepad?.buttons[0]?.pressed || gamepad?.buttons[0]?.value > 0.15);
       const isTrigger = triggerEvent || triggerGamepad;
 
-      // 2) 그립(Squeeze) 감지 (물리적 손잡이 쥐기)
+      // 2) 마우스 우클릭 대응: 그립(Squeeze) 감지 (위치 이동)
       const gripEvent = !!ctrl.userData?.isGripHeld;
       const gripGamepad = (gamepad?.buttons[1]?.pressed || gamepad?.buttons[1]?.value > 0.15);
       const isGrip = gripEvent || gripGamepad;
 
-      // 잡기 의도: 그립 또는 트리거(빈 공간) 중 하나라도 쥐면 잡기로 판단
-      const isGrabActive = isGrip || isTrigger;
+      // 3) 마우스 휠 대응: 썸스틱 상/하 감지 (확대 / 축소)
+      if (gamepad?.axes && gamepad.axes.length >= 4) {
+        const axisY = gamepad.axes[3]; // WebXR 표준 Gamepad: axes[3] = Y축 (전/후)
+        if (Math.abs(axisY) > 0.12) {
+          stickZoom += axisY;
+        }
+      }
 
-      // 3) A / X 버튼 감지 (Recenter) - WebXR 표준 버튼 인덱스 4
+      // 4) A / X 버튼 감지 (Recenter) - WebXR 표준 버튼 인덱스 4
       if (gamepad?.buttons[4]?.pressed) {
         recenterPressed = true;
         recenterSource = ctrl;
       }
 
-      if (handedness === 'left') {
-        leftController = ctrl;
-        leftGrab = isGrabActive;
-      } else if (handedness === 'right') {
-        rightController = ctrl;
-        rightGrab = isGrabActive;
+      // 5) B / Y 버튼 감지 (상단 드롭다운 모델 전환 대응) - WebXR 표준 버튼 인덱스 5
+      if (gamepad?.buttons[5]?.pressed) {
+        presetTogglePressed = true;
+        presetToggleSource = ctrl;
       }
 
-      // 4) 레이저 시각 & 햅틱 피드백 관리
-      if (!isGrabActive) {
-        // POI 핀 호버 검사
-        let hoveredPin = null;
-        if (this.poiManager && !this.activeGrabController && !this.isTwoHandGrabbing) {
-          ctrl.getWorldPosition(this._tempRayOrigin);
-          ctrl.getWorldDirection(this._tempRayDirection);
-          this._tempRayDirection.negate();
-          hoveredPin = this.poiManager.checkRayHover(this._tempRayOrigin, this._tempRayDirection);
-        }
+      if (handedness === 'left') {
+        leftController = ctrl;
+        leftTrigger = isTrigger;
+        leftGrip = isGrip;
+      } else if (handedness === 'right') {
+        rightController = ctrl;
+        rightTrigger = isTrigger;
+        rightGrip = isGrip;
+      }
 
+      // 6) 레이저 시각 & 햅틱 피드백 관리
+      let hoveredPin = null;
+      if (this.poiManager && !this.activeRotateController && !this.activePanController && !this.isTwoHandGrabbing) {
+        ctrl.getWorldPosition(this._tempRayOrigin);
+        ctrl.getWorldDirection(this._tempRayDirection);
+        this._tempRayDirection.negate();
+        hoveredPin = this.poiManager.checkRayHover(this._tempRayOrigin, this._tempRayDirection);
+      }
+
+      if (isTrigger) {
+        // 트리거 360° 회전 중: 보라색 레이저
+        this.setLaserStyle(ctrl, 0xa855f7, 0.85);
+      } else if (isGrip) {
+        // 그립 위치 이동 중: 에메랄드 그린 레이저
+        this.setLaserStyle(ctrl, 0x10b981, 0.85);
+      } else {
         const prevHovered = this._hoveredPins.get(ctrl);
         if (hoveredPin) {
-          // 새로 핀에 조준되었을 때 톡 튀는 햅틱 펄스
           if (!prevHovered) {
             this.triggerHaptic(ctrl, 0.25, 12);
           }
@@ -353,9 +396,6 @@ export class XRInteractionManager {
           this.setLaserStyle(ctrl, 0x00f0ff, 0.35); // 기본 시안
           this._hoveredPins.delete(ctrl);
         }
-      } else {
-        // 잡고 있을 때는 에메랄드 그린
-        this.setLaserStyle(ctrl, 0x10b981, 0.75);
       }
     }
 
@@ -372,43 +412,75 @@ export class XRInteractionManager {
     }
 
     // ==========================================
-    // 1. 양손 잡기: 3D 회전 + 줌인/줌아웃 + 이동
+    // 0-1. 프리셋 모델 전환 처리 (B / Y 버튼)
     // ==========================================
-    if (leftGrab && rightGrab && leftController && rightController) {
-      this.activeGrabController = null;
-      this.handleTwoHandTransform(leftController, rightController);
-    }
-    // ==========================================
-    // 2. 한 손 잡기: 1:1 자유 위치 이동
-    // ==========================================
-    else if (rightGrab && rightController) {
-      if (this.isTwoHandGrabbing) {
-        this.isTwoHandGrabbing = false;
-        this.triggerHaptic(rightController, 0.3, 15);
-      }
-      this.handleOneHandGrab(rightController);
-    } else if (leftGrab && leftController) {
-      if (this.isTwoHandGrabbing) {
-        this.isTwoHandGrabbing = false;
-        this.triggerHaptic(leftController, 0.3, 15);
-      }
-      this.handleOneHandGrab(leftController);
-    }
-    // ==========================================
-    // 3. 놓았을 때
-    // ==========================================
-    else {
-      if (this.isTwoHandGrabbing || this.activeGrabController) {
-        if (this.activeGrabController) {
-          this.triggerHaptic(this.activeGrabController, 0.2, 15);
+    if (presetTogglePressed) {
+      if (!this._wasPresetPressed) {
+        this._wasPresetPressed = true;
+        if (typeof this.onModelToggle === 'function') {
+          this.triggerHaptic(presetToggleSource, 0.7, 30);
+          this.onModelToggle();
         }
       }
-      this.activeGrabController = null;
-      this.isTwoHandGrabbing = false;
+    } else {
+      this._wasPresetPressed = false;
     }
 
     // ==========================================
-    // 4. 물리적 지수 감쇠 스무딩 (손떨림 흡수)
+    // 0-2. 마우스 휠 대응: 썸스틱 상/하 확대/축소
+    // ==========================================
+    if (Math.abs(stickZoom) > 0.12) {
+      const zoomRate = 1.2;
+      const factor = 1.0 - (stickZoom * zoomRate * Math.min(delta, 0.05));
+      this.targetScale = Math.max(this.minScale, Math.min(this.maxScale, this.targetScale * factor));
+    }
+
+    // ==========================================
+    // 1. 양손 조작 (두 손 모두 잡았을 때)
+    // ==========================================
+    const isLeftActive = leftTrigger || leftGrip;
+    const isRightActive = rightTrigger || rightGrip;
+
+    if (isLeftActive && isRightActive && leftController && rightController) {
+      this.activeRotateController = null;
+      this.activePanController = null;
+      this.handleTwoHandTransform(leftController, rightController);
+    }
+    // ==========================================
+    // 2. 한 손 조작: 데스크톱 1:1 매핑
+    // ==========================================
+    else {
+      if (this.isTwoHandGrabbing) {
+        this.isTwoHandGrabbing = false;
+      }
+
+      // 2-1) 그립: 위치 이동 (마우스 우클릭 드래그 대응)
+      if (rightGrip && rightController) {
+        this.handlePanGrab(rightController);
+      } else if (leftGrip && leftController) {
+        this.handlePanGrab(leftController);
+      } else {
+        if (this.activePanController) {
+          this.triggerHaptic(this.activePanController, 0.2, 15);
+        }
+        this.activePanController = null;
+      }
+
+      // 2-2) 트리거: 360° 궤도 회전 (마우스 좌클릭 드래그 대응)
+      if (rightTrigger && rightController) {
+        this.handleRotateGrab(rightController);
+      } else if (leftTrigger && leftController) {
+        this.handleRotateGrab(leftController);
+      } else {
+        if (this.activeRotateController) {
+          this.triggerHaptic(this.activeRotateController, 0.2, 15);
+        }
+        this.activeRotateController = null;
+      }
+    }
+
+    // ==========================================
+    // 3. 물리적 지수 감쇠 스무딩 (손떨림 흡수)
     // ==========================================
     const smoothFactor = 1.0 - Math.exp(-22 * Math.min(delta, 0.05));
     this.modelPosition.lerp(this.targetPosition, smoothFactor);
@@ -419,20 +491,54 @@ export class XRInteractionManager {
   }
 
   /**
-   * 한 손 잡기: 손의 움직임에 따라 모델 위치 이동 (감도 2.4배 증폭으로 빠르고 시원한 공간 이동)
+   * 트리거 드래그: 마우스 좌클릭 드래그와 동일한 모델 360° 궤도 회전
    */
-  handleOneHandGrab(controller) {
+  handleRotateGrab(controller) {
+    controller.getWorldPosition(this._currCtrlPos);
+    const currQuat = controller.quaternion;
+
+    if (this.activeRotateController !== controller) {
+      this.activeRotateController = controller;
+      this.rotateStartCtrlPos.copy(this._currCtrlPos);
+      this.rotateStartCtrlQuat.copy(currQuat);
+      this.rotateStartModelQuat.copy(this.targetQuaternion);
+      this.triggerHaptic(controller, 0.4, 20);
+    } else {
+      // 1) 컨트롤러의 수평/수직 이동량 (마우스 좌클릭 드래그와 동일한 궤도 회전 감각)
+      const dx = this._currCtrlPos.x - this.rotateStartCtrlPos.x;
+      const dy = this._currCtrlPos.y - this.rotateStartCtrlPos.y;
+
+      const orbitSensitivity = 3.5;
+      const yaw = dx * orbitSensitivity;
+      const pitch = -dy * orbitSensitivity;
+
+      this._orbitEuler.set(pitch, yaw, 0, 'YXZ');
+      this._orbitQuat.setFromEuler(this._orbitEuler);
+
+      // 2) 컨트롤러의 손목 3D 각도 변화량
+      this._invQuat.copy(this.rotateStartCtrlQuat).invert();
+      this._deltaQuat.copy(currQuat).multiply(this._invQuat);
+
+      // 최종 회전: 궤도 드래그 회전 * 손목 회전 * 초기 모델 각도
+      this.targetQuaternion.copy(this._orbitQuat).multiply(this._deltaQuat).multiply(this.rotateStartModelQuat);
+    }
+  }
+
+  /**
+   * 그립 드래그: 마우스 우클릭 드래그와 동일한 모델 위치 이동 (Pan)
+   */
+  handlePanGrab(controller) {
     controller.getWorldPosition(this._currCtrlPos);
 
-    if (this.activeGrabController !== controller) {
-      this.activeGrabController = controller;
-      this.grabStartControllerPos.copy(this._currCtrlPos);
-      this.grabStartModelPos.copy(this.targetPosition);
-      this.triggerHaptic(controller, 0.5, 20);
+    if (this.activePanController !== controller) {
+      this.activePanController = controller;
+      this.panStartCtrlPos.copy(this._currCtrlPos);
+      this.panStartModelPos.copy(this.targetPosition);
+      this.triggerHaptic(controller, 0.4, 20);
     } else {
-      const oneHandSensitivity = 3.5; // 손의 움직임 변위를 3.5배로 상향 증폭 (기존 2.4배 대비 1.45배 증가)
-      this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos).multiplyScalar(oneHandSensitivity);
-      this.targetPosition.copy(this.grabStartModelPos).add(this._deltaPos);
+      const panSensitivity = 3.5;
+      this._deltaPos.copy(this._currCtrlPos).sub(this.panStartCtrlPos).multiplyScalar(panSensitivity);
+      this.targetPosition.copy(this.panStartModelPos).add(this._deltaPos);
     }
   }
 

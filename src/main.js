@@ -36,6 +36,37 @@ window.addEventListener('DOMContentLoaded', async () => {
   const poiCard = new POICard();
   let overlayUI = null;
 
+  let currentPresetKey = 'bonsai';
+
+  const selectModel = async (presetKey) => {
+    currentPresetKey = presetKey;
+    if (overlayUI?.modelSelect) {
+      overlayUI.modelSelect.value = presetKey;
+    }
+    const preset = PRESET_MODELS[presetKey];
+    if (preset) {
+      poiCard.hide();
+      loadingIndicator.show(`'${presetKey}' 씬을 불러오는 중...`);
+      try {
+        await engine.loadModel(preset.path, {
+          position: preset.position,
+          rotation: preset.rotation,
+          scale: preset.scale,
+          cameraPosition: preset.cameraPosition,
+          cameraLookAt: preset.cameraLookAt,
+          cameraUp: preset.cameraUp
+        });
+        // 모델 전환 시 전용 POI 핀으로 교체
+        const poiMgr = engine.getPOIManager();
+        if (poiMgr) {
+          poiMgr.loadPreset(presetKey);
+        }
+      } catch (e) {
+        console.error('프리셋 로드 실패:', e);
+      }
+    }
+  };
+
   // 엔진 초기화
   const engine = new Engine({
     vrButtonContainer: document.getElementById('vr-button-container'),
@@ -62,34 +93,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     },
     onPOISelected: (poiData) => {
       poiCard.show(poiData);
+    },
+    onModelToggle: () => {
+      const nextKey = currentPresetKey === 'bonsai' ? 'dragon' : 'bonsai';
+      selectModel(nextKey);
     }
   });
 
   // UI 오버레이 초기화
   overlayUI = new OverlayUI({
     onModelSelect: async (presetKey) => {
-      const preset = PRESET_MODELS[presetKey];
-      if (preset) {
-        poiCard.hide();
-        loadingIndicator.show(`'${presetKey}' 씬을 불러오는 중...`);
-        try {
-          await engine.loadModel(preset.path, {
-            position: preset.position,
-            rotation: preset.rotation,
-            scale: preset.scale,
-            cameraPosition: preset.cameraPosition,
-            cameraLookAt: preset.cameraLookAt,
-            cameraUp: preset.cameraUp
-          });
-          // 모델 전환 시 전용 POI 핀으로 교체
-          const poiMgr = engine.getPOIManager();
-          if (poiMgr) {
-            poiMgr.loadPreset(presetKey);
-          }
-        } catch (e) {
-          console.error('프리셋 로드 실패:', e);
-        }
-      }
+      await selectModel(presetKey);
     },
     onFileLoad: async (file) => {
       poiCard.hide();

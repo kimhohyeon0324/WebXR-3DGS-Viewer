@@ -25,6 +25,7 @@ export class Engine {
     this.onSceneLoaded = options.onSceneLoaded || (() => {});
     this.onVRStateChanged = options.onVRStateChanged || (() => {});
     this.onPOISelected = options.onPOISelected || (() => {});
+    this.onModelToggle = options.onModelToggle || null;
 
     // Three.js 가상 공간 보조 씬 (그리드, 마커, 라이트 등)
     this.scene = new THREE.Scene();
@@ -92,6 +93,7 @@ export class Engine {
       buttonContainer: this.vrButtonContainer,
       poiManager: this.poiManager,
       splatManager: this.splatManager,
+      onModelToggle: this.onModelToggle,
       onSessionStart: ({ session, cameraRig }) => {
         this.clock.start();
         this.splatManager.enterVR((time, frame) => {

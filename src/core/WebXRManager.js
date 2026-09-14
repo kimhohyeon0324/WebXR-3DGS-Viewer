@@ -81,6 +81,8 @@ export class WebXRManager {
     // 컨트롤러 설정
     this.setupControllers();
 
+    this.onModelToggle = options.onModelToggle || null;
+
     // 인터랙션 매니저 초기화
     this.interactionManager = new XRInteractionManager({
       renderer: this.renderer,
@@ -90,7 +92,8 @@ export class WebXRManager {
       controllers: this.controllers,
       targetScene: this.scene,
       poiManager: this.poiManager,
-      splatManager: this.splatManager
+      splatManager: this.splatManager,
+      onModelToggle: this.onModelToggle
     });
 
     // 세션 생명주기 이벤트
