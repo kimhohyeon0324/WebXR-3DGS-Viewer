@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 
 /**
- * WebXR 6DoF 인스펙터(Inspector) 인터랙션 관리자
- * - 오른손 그립(Grab Orbit & Pan): 3DGS 모델을 손으로 잡고 이동 및 손목 각도로 회전
- * - 양손 그립(Pinch Scale & Rotate): 스마트폰 핀치줌처럼 양손을 벌려 확대/축소 및 양손 축 회전
- * - 45도 스냅 회전 (오른손 썸스틱 좌/우): 모델을 45도씩 깔끔하게 정렬 회전
- * - 원터치 정면 시점 복귀 (오른손 트리거 클릭 또는 A 버튼): 현재 HMD 시선 정면 눈높이 1.2m 위치로 모델 복귀 및 리셋
- * - 3D POI 핀 레이저 피킹 (오른손 트리거로 핀 조준 클릭)
+ * WebXR 6DoF 직관적 뷰어 인터랙션 관리자
+ * - 잡고 이동 & 회전 (그립 버튼): 어느 손이든 그립을 쥐고 손을 움직이면 모델이 그대로 이동 및 회전
+ * - 돌리기 (썸스틱 좌/우): 썸스틱을 좌우로 밀어 모델 부드럽게 회전
+ * - 줌인/줌아웃 (썸스틱 상/하): 썸스틱을 앞뒤로 밀어 모델 확대/축소 (마우스 휠처럼 직관적)
+ * - 양손 핀치 줌 (양손 그립): 두 손을 벌리거나 모아서 크기 조절
+ * - 3D POI 핀 피킹 (트리거 클릭): 트리거로 POI 핀 조준 클릭
  */
 export class XRInteractionManager {
   /**
@@ -37,33 +37,31 @@ export class XRInteractionManager {
     this.modelRotationY = 0;
     this.modelScale = 1.0;
 
-    // 조작 스케일 제한
-    this.minScale = 0.2;
-    this.maxScale = 5.0;
+    // 조작 파라미터
+    this.minScale = 0.1;
+    this.maxScale = 6.0;
+    this.zoomSpeed = 1.2; // 썸스틱 줌 속도
+    this.rotateSpeed = 2.0; // 썸스틱 회전 속도 (rad/s)
+    this.deadzone = 0.15; // 썸스틱 데드존
 
-    // 스냅 턴 파라미터
-    this.snapAngle = THREE.MathUtils.degToRad(45);
-    this.snapCooldown = 0.35; // 초 단위 쿨다운
-    this.lastSnapTime = 0;
-    this.deadzone = 0.5;
-
-    // 한 손 잡기 (One-Hand Grab) 상태
-    this.isOneHandGrabbing = false;
+    // 잡기(Grab) 인터랙션 상태
+    this.activeGrabController = null; // 현재 잡기를 수행 중인 컨트롤러
     this.grabStartControllerPos = new THREE.Vector3();
     this.grabStartModelPos = new THREE.Vector3();
     this.grabStartControllerYaw = 0;
     this.grabStartModelRotY = 0;
 
-    // 양손 잡기 (Two-Hand Pinch) 상태
-    this.isTwoHandGrabbing = false;
+    // 양손 핀치(Two-Hand Pinch) 상태
+    this.isTwoHandPinching = false;
     this.initialHandsDistance = 0;
     this.initialModelScale = 1.0;
     this.initialHandsAngle = 0;
     this.initialHandsRotY = 0;
 
-    // 임시 연산용 벡터 (가비지 컬렉션 방지)
+    // 임시 연산용 벡터 (GC 방지)
     this._leftPos = new THREE.Vector3();
     this._rightPos = new THREE.Vector3();
+    this._currCtrlPos = new THREE.Vector3();
     this._deltaPos = new THREE.Vector3();
     this._tempCamPos = new THREE.Vector3();
     this._tempCamDir = new THREE.Vector3();
@@ -71,7 +69,6 @@ export class XRInteractionManager {
     this._tempRayDirection = new THREE.Vector3();
     this._controllerEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
-    // 이벤트 바인딩
     this.bindControllerEvents();
   }
 
@@ -84,42 +81,45 @@ export class XRInteractionManager {
   }
 
   /**
-   * 컨트롤러 이벤트 바인딩 (트리거 클릭 시 POI 피킹 또는 시점 리셋)
+   * 컨트롤러 이벤트 바인딩 (트리거 클릭은 오직 POI 피킹만 전담)
    */
   bindControllerEvents() {
+    // 오른손 트리거: POI 피킹
     const rightController = this.controllers[0];
     if (rightController) {
       rightController.addEventListener('selectstart', () => {
-        if (!this.active) return;
+        if (!this.active || !this.poiManager) return;
 
-        // 1) POI 핀 피킹 검사
-        if (this.poiManager) {
-          rightController.getWorldPosition(this._tempRayOrigin);
-          rightController.getWorldDirection(this._tempRayDirection);
-          this._tempRayDirection.negate();
-          const pickedPOI = this.poiManager.pickWithRay(this._tempRayOrigin, this._tempRayDirection);
-          if (pickedPOI) {
-            console.log('XRInteraction: VR 컨트롤러로 POI 핀 선택 완료');
-            return;
-          }
-        }
+        rightController.getWorldPosition(this._tempRayOrigin);
+        rightController.getWorldDirection(this._tempRayDirection);
+        this._tempRayDirection.negate();
+        this.poiManager.pickWithRay(this._tempRayOrigin, this._tempRayDirection);
+      });
+    }
 
-        // 2) POI 핀을 조준하지 않고 허공 클릭 시: 정면 눈높이로 시점 복귀 (Recenter)
-        this.recenterToEyeLevel();
+    // 왼손 트리거도 동일하게 POI 피킹 지원
+    const leftController = this.controllers[1];
+    if (leftController) {
+      leftController.addEventListener('selectstart', () => {
+        if (!this.active || !this.poiManager) return;
+
+        leftController.getWorldPosition(this._tempRayOrigin);
+        leftController.getWorldDirection(this._tempRayDirection);
+        this._tempRayDirection.negate();
+        this.poiManager.pickWithRay(this._tempRayOrigin, this._tempRayDirection);
       });
     }
   }
 
   /**
-   * 현재 HMD 시선 정면 눈높이 1.2m 위치로 모델 복귀 및 리셋
+   * VR 진입 시 사용자의 현재 정면 눈높이 위치로 모델 초기 배치
    */
-  recenterToEyeLevel() {
+  initViewPosition() {
     if (!this.camera) return;
 
     this.camera.getWorldPosition(this._tempCamPos);
     this.camera.getWorldDirection(this._tempCamDir);
 
-    // 수평 시선 방향만 추출 (고개 숙임/들림에 영향 받지 않도록 Y축 제거)
     this._tempCamDir.y = 0;
     if (this._tempCamDir.lengthSq() < 0.001) {
       this._tempCamDir.set(0, 0, -1);
@@ -127,20 +127,17 @@ export class XRInteractionManager {
       this._tempCamDir.normalize();
     }
 
-    // 시선 정면 1.2m, 눈높이 살짝 아래(-0.2m)로 타깃 설정 (가장 편안한 뷰어 관찰 각도)
-    this.modelPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 1.2);
+    // 시선 정면 1.3m, 눈높이 살짝 아래(-0.2m)에 편안하게 배치
+    this.modelPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 1.3);
     this.modelPosition.y = Math.max(0.4, this._tempCamPos.y - 0.2);
-
-    // 모델이 사용자를 똑바로 바라보도록 Y축 회전 정렬
     this.modelRotationY = Math.atan2(this._tempCamDir.x, this._tempCamDir.z) + Math.PI;
     this.modelScale = 1.0;
 
     this.applyTransform();
-    console.log('XRInteraction: 모델을 시선 정면 눈높이로 재정렬(Recenter) 완료');
   }
 
   /**
-   * 모델 트랜스폼을 splatMesh 및 poiGroup에 일괄 적용
+   * 모델 트랜스폼 적용 (splatMesh 및 poiGroup)
    */
   applyTransform() {
     const splatMesh = this.splatManager?.getSplatMesh();
@@ -163,23 +160,22 @@ export class XRInteractionManager {
 
   activate() {
     this.active = true;
-    this.isOneHandGrabbing = false;
-    this.isTwoHandGrabbing = false;
+    this.activeGrabController = null;
+    this.isTwoHandPinching = false;
 
-    // VR 진입 시 편안한 정면 위치로 자동 정렬
     setTimeout(() => {
-      this.recenterToEyeLevel();
-    }, 150);
+      this.initViewPosition();
+    }, 200);
   }
 
   deactivate() {
     this.active = false;
-    this.isOneHandGrabbing = false;
-    this.isTwoHandGrabbing = false;
+    this.activeGrabController = null;
+    this.isTwoHandPinching = false;
   }
 
   /**
-   * 매 프레임 인터랙션 갱신 (WebXR 렌더 루프에서 호출)
+   * 매 프레임 인터랙션 루프
    */
   update(delta = 0.016) {
     if (!this.active) return;
@@ -200,59 +196,62 @@ export class XRInteractionManager {
     const leftGrip = !!(leftGamepad?.buttons[1]?.pressed);
     const rightGrip = !!(rightGamepad?.buttons[1]?.pressed);
 
-    const leftController = this.controllers[1];
     const rightController = this.controllers[0];
+    const leftController = this.controllers[1];
 
-    // 1) 양손 그립: 핀치 스케일 & 회전
+    // ==========================================
+    // 1. 그립(Grip) 조작: 잡고 이동 및 줌/회전
+    // ==========================================
+    // A) 양손 그립 동시 누름: 양손 핀치 줌 & 회전
     if (leftGrip && rightGrip && leftController && rightController) {
-      this.handleTwoHandedManipulation(leftController, rightController);
+      this.activeGrabController = null;
+      this.handleTwoHandPinch(leftController, rightController);
     }
-    // 2) 오른손 단독 그립: 오브젝트 잡고 이동 및 손목 회전
+    // B) 한 손 그립 누름: 잡고 이동 및 손목 회전 (오른손 또는 왼손)
     else if (rightGrip && rightController) {
-      this.isTwoHandGrabbing = false;
+      this.isTwoHandPinching = false;
       this.handleOneHandGrab(rightController);
+    } else if (leftGrip && leftController) {
+      this.isTwoHandPinching = false;
+      this.handleOneHandGrab(leftController);
     }
-    // 3) 그립을 모두 놓았을 때: 잡기 상태 해제
+    // C) 그립을 모두 놓았을 때: 잡기 상태 초기화
     else {
-      this.isOneHandGrabbing = false;
-      this.isTwoHandGrabbing = false;
+      this.activeGrabController = null;
+      this.isTwoHandPinching = false;
     }
 
-    // 4) 오른손 썸스틱 45도 스냅 회전
-    if (rightGamepad && !this.isOneHandGrabbing && !this.isTwoHandGrabbing) {
-      this.handleSnapTurn(rightGamepad);
-    }
+    // ==========================================
+    // 2. 썸스틱 조작: 돌리기(좌우) & 줌인아웃(앞뒤)
+    // ==========================================
+    const activeStick = (rightGamepad && rightGamepad.axes.length >= 4) ? rightGamepad :
+                        (leftGamepad && leftGamepad.axes.length >= 4) ? leftGamepad : null;
 
-    // 5) A 버튼 (Primary Button, index 4): 즉시 시점 리셋
-    if (rightGamepad?.buttons[4]?.pressed) {
-      const now = performance.now() / 1000;
-      if (now - this.lastSnapTime > 0.5) {
-        this.recenterToEyeLevel();
-        this.lastSnapTime = now;
-      }
+    if (activeStick && !this.activeGrabController && !this.isTwoHandPinching) {
+      this.handleThumbstick(activeStick, delta);
     }
   }
 
   /**
-   * 오른손 단독 그립: 공중에 뜬 모델을 손으로 잡고 위치 이동 및 손목 회전
+   * 한 손 잡기: 손의 움직임대로 모델 이동 및 손목 각도대로 회전
    */
   handleOneHandGrab(controller) {
-    controller.getWorldPosition(this._rightPos);
+    controller.getWorldPosition(this._currCtrlPos);
     this._controllerEuler.setFromQuaternion(controller.quaternion, 'YXZ');
     const currentYaw = this._controllerEuler.y;
 
-    if (!this.isOneHandGrabbing) {
-      this.isOneHandGrabbing = true;
-      this.grabStartControllerPos.copy(this._rightPos);
+    if (this.activeGrabController !== controller) {
+      this.activeGrabController = controller;
+      this.grabStartControllerPos.copy(this._currCtrlPos);
       this.grabStartModelPos.copy(this.modelPosition);
       this.grabStartControllerYaw = currentYaw;
       this.grabStartModelRotY = this.modelRotationY;
     } else {
-      // 1) 위치 이동 (손이 움직인 델타 벡터만큼 모델 이동)
-      this._deltaPos.copy(this._rightPos).sub(this.grabStartControllerPos);
+      // 위치 이동 (손이 움직인 만큼 모델 이동)
+      this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos);
       this.modelPosition.copy(this.grabStartModelPos).add(this._deltaPos);
 
-      // 2) 손목 회전 (컨트롤러 Y축 각도 변화만큼 모델 회전)
+      // 손목 회전 (손목 각도가 틀어진 만큼 모델 회전)
       const deltaYaw = currentYaw - this.grabStartControllerYaw;
       this.modelRotationY = this.grabStartModelRotY + deltaYaw;
 
@@ -261,30 +260,29 @@ export class XRInteractionManager {
   }
 
   /**
-   * 양손 그립: 두 손의 거리 비율로 확대/축소 및 두 손 축 각도로 회전
+   * 양손 핀치: 두 손 사이 거리로 확대/축소 및 회전
    */
-  handleTwoHandedManipulation(leftController, rightController) {
+  handleTwoHandPinch(leftController, rightController) {
     leftController.getWorldPosition(this._leftPos);
     rightController.getWorldPosition(this._rightPos);
 
     const currentDistance = this._leftPos.distanceTo(this._rightPos);
     const currentAngle = Math.atan2(this._rightPos.x - this._leftPos.x, this._rightPos.z - this._leftPos.z);
 
-    if (!this.isTwoHandGrabbing) {
-      this.isTwoHandGrabbing = true;
-      this.isOneHandGrabbing = false;
+    if (!this.isTwoHandPinching) {
+      this.isTwoHandPinching = true;
       this.initialHandsDistance = currentDistance;
       this.initialModelScale = this.modelScale;
       this.initialHandsAngle = currentAngle;
       this.initialHandsRotY = this.modelRotationY;
     } else {
-      // 1) 스케일 확대/축소 (0.2 ~ 5.0배 클램핑)
+      // 거리 비율로 스케일 조절
       if (this.initialHandsDistance > 0.05) {
         const ratio = currentDistance / this.initialHandsDistance;
         this.modelScale = Math.max(this.minScale, Math.min(this.maxScale, this.initialModelScale * ratio));
       }
 
-      // 2) 회전
+      // 두 손을 잇는 축의 회전
       const deltaAngle = currentAngle - this.initialHandsAngle;
       this.modelRotationY = this.initialHandsRotY + deltaAngle;
 
@@ -293,27 +291,32 @@ export class XRInteractionManager {
   }
 
   /**
-   * 오른손 썸스틱 45도 스냅 회전
+   * 썸스틱 조작:
+   * - 좌/우 (axes[2]): 모델 부드럽게 회전
+   * - 앞/뒤 (axes[3]): 모델 줌인 / 줌아웃 (마우스 휠 방식)
    */
-  handleSnapTurn(gamepad) {
+  handleThumbstick(gamepad, delta) {
     const axes = gamepad.axes;
-    if (!axes || axes.length < 4) return;
-
     const stickX = axes[2];
-    const now = performance.now() / 1000;
+    const stickY = axes[3];
 
-    if (now - this.lastSnapTime < this.snapCooldown) {
-      return;
+    let needUpdate = false;
+
+    // 1) 좌우 썸스틱 -> 모델 부드러운 회전
+    if (Math.abs(stickX) > this.deadzone) {
+      this.modelRotationY -= stickX * this.rotateSpeed * delta;
+      needUpdate = true;
     }
 
-    if (stickX > this.deadzone) {
-      this.modelRotationY -= this.snapAngle;
+    // 2) 앞뒤 썸스틱 -> 줌인(앞으로 밀기) / 줌아웃(뒤로 당기기)
+    if (Math.abs(stickY) > this.deadzone) {
+      const zoomFactor = 1.0 - stickY * this.zoomSpeed * delta;
+      this.modelScale = Math.max(this.minScale, Math.min(this.maxScale, this.modelScale * zoomFactor));
+      needUpdate = true;
+    }
+
+    if (needUpdate) {
       this.applyTransform();
-      this.lastSnapTime = now;
-    } else if (stickX < -this.deadzone) {
-      this.modelRotationY += this.snapAngle;
-      this.applyTransform();
-      this.lastSnapTime = now;
     }
   }
 }
