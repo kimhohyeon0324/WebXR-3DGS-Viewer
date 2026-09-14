@@ -81,18 +81,37 @@ export class XRInteractionManager {
 
   /**
    * 컨트롤러 이벤트 바인딩
-   * 트리거 누름 시 POI 핀 피킹 먼저 검사 (핀 조준 시 VR 카드 토글)
+   * 1) POI 핀 피킹 검사 (핀 조준 시 VR 카드 토글)
+   * 2) 트리거 잡기(Grab) 시작 및 종료 즉시 감지 (selectstart / selectend)
    */
   bindControllerEvents() {
     this.controllers.forEach((controller) => {
       if (!controller) return;
-      controller.addEventListener('selectstart', () => {
-        if (!this.active || !this.poiManager) return;
 
-        controller.getWorldPosition(this._tempRayOrigin);
-        controller.getWorldDirection(this._tempRayDirection);
-        this._tempRayDirection.negate();
-        this.poiManager.pickWithRay(this._tempRayOrigin, this._tempRayDirection);
+      controller.addEventListener('selectstart', () => {
+        if (!this.active) return;
+
+        // 1. POI 핀 레이저 피킹 우선 확인
+        if (this.poiManager) {
+          controller.getWorldPosition(this._tempRayOrigin);
+          controller.getWorldDirection(this._tempRayDirection);
+          this._tempRayDirection.negate();
+          const pickedPOI = this.poiManager.pickWithRay(this._tempRayOrigin, this._tempRayDirection);
+          if (pickedPOI) {
+            // 핀을 클릭한 경우 잡기 조작으로 전이되지 않도록 리턴
+            return;
+          }
+        }
+
+        // 2. 핀이 아니라면 즉시 오브젝트 잡기 시작
+        controller.userData.isTriggerHeld = true;
+      });
+
+      controller.addEventListener('selectend', () => {
+        controller.userData.isTriggerHeld = false;
+        if (this.activeGrabController === controller) {
+          this.activeGrabController = null;
+        }
       });
     });
   }
@@ -164,15 +183,13 @@ export class XRInteractionManager {
 
   /**
    * 매 프레임 인터랙션 루프
-   * 오직 트리거(buttons[0])만 사용하여 잡고 이동 & 양손 줌인아웃 수행
+   * 이벤트 상태(isTriggerHeld)와 WebXR 게임패드 상태를 이중 감지하여 100% 신뢰성 보장
    */
   update(delta = 0.016) {
     if (!this.active) return;
 
     const session = this.renderer?.xr?.getSession();
-    if (!session) return;
 
-    // 1. 각 컨트롤러의 handedness에 맞추어 leftController, rightController 및 트리거 상태 정확히 매핑
     let leftController = null;
     let rightController = null;
     let leftTrigger = false;
@@ -180,19 +197,27 @@ export class XRInteractionManager {
 
     for (let i = 0; i < this.controllers.length; i++) {
       const ctrl = this.controllers[i];
-      // connected 이벤트의 handedness 우선 확인, 없으면 인덱스 폴백
       const handedness = ctrl.userData?.handedness || (i === 0 ? 'right' : 'left');
-      const gamepad = ctrl.userData?.inputSource?.gamepad ||
-        (session.inputSources ? Array.from(session.inputSources).find(s => s?.handedness === handedness)?.gamepad : null);
 
-      const isTriggerPressed = !!(gamepad?.buttons[0]?.pressed);
+      // 1) selectstart/selectend 이벤트 기반 트리거 상태
+      const eventHeld = !!ctrl.userData?.isTriggerHeld;
+
+      // 2) WebXR gamepad 폴링 기반 트리거 상태 (pressed 또는 value > 0.15)
+      let gamepadPressed = false;
+      const gamepad = ctrl.userData?.inputSource?.gamepad ||
+        (session?.inputSources ? Array.from(session.inputSources).find(s => s?.handedness === handedness)?.gamepad : null);
+      if (gamepad?.buttons[0]) {
+        gamepadPressed = gamepad.buttons[0].pressed || gamepad.buttons[0].value > 0.15;
+      }
+
+      const isPressed = eventHeld || gamepadPressed;
 
       if (handedness === 'left') {
         leftController = ctrl;
-        leftTrigger = isTriggerPressed;
+        leftTrigger = isPressed;
       } else if (handedness === 'right') {
         rightController = ctrl;
-        rightTrigger = isTriggerPressed;
+        rightTrigger = isPressed;
       }
     }
 
@@ -223,7 +248,7 @@ export class XRInteractionManager {
   }
 
   /**
-   * 한 손 잡기: 손의 6DoF 이동 및 손목 회전에 맞춰 모델이 1:1로 이동 및 '오브젝트 중심'으로 회전
+   * 한 손 잡기: 손의 6DoF 이동 및 손목 회전에 맞춰 모델이 1:1로 손을 따라 이동 및 회전
    */
   handleOneHandGrab(controller) {
     controller.getWorldPosition(this._currCtrlPos);
@@ -236,14 +261,18 @@ export class XRInteractionManager {
       this.grabStartModelPos.copy(this.modelPosition);
       this.grabStartModelQuat.copy(this.modelQuaternion);
     } else {
-      // 1) 위치 이동 (잡은 손이 움직인 만큼 모델 이동)
-      this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos);
-      this.modelPosition.copy(this.grabStartModelPos).add(this._deltaPos);
-
-      // 2) 회전 (잡은 손목이 회전한 델타 쿼터니언을 오브젝트 중심에 1:1 적용)
+      // 1) 손목 회전 델타 계산 (deltaQuat = Q_curr * Q_start^-1)
       this._invStartQuat.copy(this.grabStartControllerQuat).invert();
       this._deltaQuat.multiplyQuaternions(this._currCtrlQuat, this._invStartQuat);
+
+      // 2) 회전 적용 (손목이 틀어진 만큼 오브젝트 회전)
       this.modelQuaternion.multiplyQuaternions(this._deltaQuat, this.grabStartModelQuat);
+
+      // 3) 손과 오브젝트 사이의 상대 벡터 회전 + 손의 위치 이동 적용 (손에 자연스럽게 쥐어진 상태로 이동)
+      this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos);
+      const grabOffset = new THREE.Vector3().copy(this.grabStartModelPos).sub(this.grabStartControllerPos);
+      grabOffset.applyQuaternion(this._deltaQuat);
+      this.modelPosition.copy(this._currCtrlPos).add(grabOffset);
 
       this.applyTransform();
     }
