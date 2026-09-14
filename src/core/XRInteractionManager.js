@@ -2,11 +2,11 @@ import * as THREE from 'three';
 
 /**
  * WebXR 6DoF 직관적 뷰어 인터랙션 관리자
- * - 잡고 이동 & 회전 (그립 버튼): 어느 손이든 그립을 쥐고 손을 움직이면 모델이 그대로 이동 및 회전
- * - 돌리기 (썸스틱 좌/우): 썸스틱을 좌우로 밀어 모델 부드럽게 회전
+ * - 오브젝트 잡고 이동 & 회전 (트리거 또는 그립 버튼): 편한 손으로 트리거/그립을 쥐고 움직이면 모델이 1:1로 이동 및 회전
+ * - 돌리기 (썸스틱 좌/우): 썸스틱을 좌우로 밀어 모델 부드럽게 연속 회전
  * - 줌인/줌아웃 (썸스틱 상/하): 썸스틱을 앞뒤로 밀어 모델 확대/축소 (마우스 휠처럼 직관적)
- * - 양손 핀치 줌 (양손 그립): 두 손을 벌리거나 모아서 크기 조절
- * - 3D POI 핀 피킹 (트리거 클릭): 트리거로 POI 핀 조준 클릭
+ * - 양손 핀치 줌 (양손 트리거/그립): 두 손을 벌리거나 모아서 직관적인 크기 조절 및 회전
+ * - 3D POI 핀 피킹 & VR 3D 카드 열람: 트리거로 POI 핀을 조준 클릭 시 VR 3D 정보 카드가 공중에 표시
  */
 export class XRInteractionManager {
   /**
@@ -193,29 +193,35 @@ export class XRInteractionManager {
       }
     }
 
+    // buttons[0] (트리거), buttons[1] (그립) 중 하나라도 누르면 "잡기" 입력으로 인정
+    const leftTrigger = !!(leftGamepad?.buttons[0]?.pressed);
     const leftGrip = !!(leftGamepad?.buttons[1]?.pressed);
+    const rightTrigger = !!(rightGamepad?.buttons[0]?.pressed);
     const rightGrip = !!(rightGamepad?.buttons[1]?.pressed);
+
+    const isLeftGrabbing = leftTrigger || leftGrip;
+    const isRightGrabbing = rightTrigger || rightGrip;
 
     const rightController = this.controllers[0];
     const leftController = this.controllers[1];
 
     // ==========================================
-    // 1. 그립(Grip) 조작: 잡고 이동 및 줌/회전
+    // 1. 오브젝트 잡기(Grab) 조작 (트리거 또는 그립)
     // ==========================================
-    // A) 양손 그립 동시 누름: 양손 핀치 줌 & 회전
-    if (leftGrip && rightGrip && leftController && rightController) {
+    // A) 양손 동시 잡기: 양손 핀치 줌 & 회전
+    if (isLeftGrabbing && isRightGrabbing && leftController && rightController) {
       this.activeGrabController = null;
       this.handleTwoHandPinch(leftController, rightController);
     }
-    // B) 한 손 그립 누름: 잡고 이동 및 손목 회전 (오른손 또는 왼손)
-    else if (rightGrip && rightController) {
+    // B) 한 손 잡기: 손의 움직임대로 모델 이동 및 손목 각도대로 회전 (오른손 우선 or 왼손)
+    else if (isRightGrabbing && rightController) {
       this.isTwoHandPinching = false;
       this.handleOneHandGrab(rightController);
-    } else if (leftGrip && leftController) {
+    } else if (isLeftGrabbing && leftController) {
       this.isTwoHandPinching = false;
       this.handleOneHandGrab(leftController);
     }
-    // C) 그립을 모두 놓았을 때: 잡기 상태 초기화
+    // C) 잡기를 모두 놓았을 때: 잡기 상태 초기화
     else {
       this.activeGrabController = null;
       this.isTwoHandPinching = false;

@@ -25,7 +25,142 @@ export class POIManager {
 
     this.raycaster = new THREE.Raycaster();
 
+    // VR 공간 전용 3D 플로팅 정보 카드 메쉬
+    this.vrCardMesh = this.createVRCardMesh();
+    this.scene.add(this.vrCardMesh);
+
     this.initDefaultPins();
+  }
+
+  /**
+   * VR 세션 내에 텍스트와 메타데이터를 표시할 3D Canvas 텍스처 패널 생성
+   */
+  createVRCardMesh() {
+    this.cardCanvas = document.createElement('canvas');
+    this.cardCanvas.width = 512;
+    this.cardCanvas.height = 256;
+    this.cardCtx = this.cardCanvas.getContext('2d');
+
+    this.cardTexture = new THREE.CanvasTexture(this.cardCanvas);
+    this.cardTexture.minFilter = THREE.LinearFilter;
+    this.cardTexture.magFilter = THREE.LinearFilter;
+
+    // 가로 0.42m, 세로 0.21m의 컴팩트한 평면
+    const geometry = new THREE.PlaneGeometry(0.42, 0.21);
+    const material = new THREE.MeshBasicMaterial({
+      map: this.cardTexture,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      depthWrite: false
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'VR_POI_InfoCard';
+    mesh.visible = false;
+    mesh.renderOrder = 30; // 핀보다 상위에 렌더링
+    return mesh;
+  }
+
+  /**
+   * 2D Canvas에 POI 메타데이터 렌더링 후 텍스처 갱신
+   */
+  updateVRCardTexture(poiData) {
+    if (!this.cardCtx) return;
+    const ctx = this.cardCtx;
+    const w = 512;
+    const h = 256;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // 1. 반투명 글래스모피즘 배경
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    this._roundRect(ctx, 4, 4, w - 8, h - 8, 20);
+    ctx.fill();
+
+    // 2. 테두리 네온 라인
+    const isHaptic = poiData.type === 'haptic';
+    ctx.strokeStyle = isHaptic ? 'rgba(245, 158, 11, 0.9)' : 'rgba(0, 240, 255, 0.9)';
+    ctx.lineWidth = 4;
+    this._roundRect(ctx, 4, 4, w - 8, h - 8, 20);
+    ctx.stroke();
+
+    // 3. 타입 뱃지
+    const badgeColor = isHaptic ? '#f59e0b' : '#00f0ff';
+    ctx.fillStyle = badgeColor;
+    this._roundRect(ctx, 24, 22, isHaptic ? 90 : 80, 28, 6);
+    ctx.fill();
+
+    ctx.fillStyle = '#0a0e17';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText((poiData.type || 'POI').toUpperCase(), isHaptic ? 69 : 64, 36);
+
+    // 4. 타이틀
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(poiData.title || 'POI Metadata', 120, 36);
+
+    // 5. 구분선
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(24, 62);
+    ctx.lineTo(w - 24, 62);
+    ctx.stroke();
+
+    // 6. 3D 좌표 정보
+    const coordStr = poiData.coordinates
+      ? `(${poiData.coordinates.x.toFixed(3)}, ${poiData.coordinates.y.toFixed(3)}, ${poiData.coordinates.z.toFixed(3)})`
+      : 'N/A';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '14px monospace';
+    ctx.fillText(`3D POS: ${coordStr}`, 24, 84);
+
+    // 7. 설명문 본문 (자동 줄바꿈)
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '16px sans-serif';
+    this._wrapText(ctx, poiData.description || '', 24, 116, w - 48, 24);
+
+    this.cardTexture.needsUpdate = true;
+  }
+
+  _roundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+
+  _wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    let line = '';
+    let currentY = y;
+    for (let i = 0; i < text.length; i++) {
+      const testLine = line + text[i];
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && i > 0) {
+        ctx.fillText(line, x, currentY);
+        line = text[i];
+        currentY += lineHeight;
+        if (currentY > 230) {
+          ctx.fillText(line + '...', x, currentY);
+          return;
+        }
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, currentY);
   }
 
   /**
@@ -191,9 +326,33 @@ export class POIManager {
   }
 
   selectPin(pin) {
+    if (this.selectedPin === pin && this.vrCardMesh.visible) {
+      // 이미 선택된 핀을 다시 클릭하면 VR 카드 닫기 토글
+      this.selectedPin = null;
+      this.vrCardMesh.visible = false;
+      console.log(`POIManager: 핀 선택 해제 -> ${pin.userData.title}`);
+      return;
+    }
+
     this.selectedPin = pin;
+    this.updateVRCardTexture(pin.userData);
+
+    // VR 카드를 핀 상단 0.22m 위치에 배치
+    const pinWorldPos = new THREE.Vector3();
+    pin.getWorldPosition(pinWorldPos);
+    this.vrCardMesh.position.copy(pinWorldPos);
+    this.vrCardMesh.position.y += 0.22;
+    this.vrCardMesh.visible = true;
+
     this.onPOISelect(pin.userData);
-    console.log(`POIManager: 핀 선택됨 -> ${pin.userData.title}`);
+    console.log(`POIManager: 핀 선택됨 -> ${pin.userData.title} (VR 3D 카드 활성화)`);
+  }
+
+  hideVRCard() {
+    this.selectedPin = null;
+    if (this.vrCardMesh) {
+      this.vrCardMesh.visible = false;
+    }
   }
 
   update(time = 0) {
@@ -219,6 +378,19 @@ export class POIManager {
         sphere.scale.set(bounce, bounce, bounce);
       }
     }
+
+    // VR 플로팅 카드 빌보드(항상 사용자의 시선 카메라를 정면으로 바라봄)
+    if (this.vrCardMesh && this.vrCardMesh.visible && this.camera) {
+      this.vrCardMesh.lookAt(this.camera.position);
+
+      // 선택된 핀이 모델과 함께 이동할 경우 카드의 월드 위치도 동기화
+      if (this.selectedPin) {
+        const pinWorldPos = new THREE.Vector3();
+        this.selectedPin.getWorldPosition(pinWorldPos);
+        this.vrCardMesh.position.copy(pinWorldPos);
+        this.vrCardMesh.position.y += 0.22;
+      }
+    }
   }
 
   getAllPins() {
@@ -232,5 +404,8 @@ export class POIManager {
     }
     this.pins = [];
     this.selectedPin = null;
+    if (this.vrCardMesh) {
+      this.vrCardMesh.visible = false;
+    }
   }
 }
