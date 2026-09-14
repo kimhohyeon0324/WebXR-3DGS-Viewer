@@ -72,6 +72,7 @@ export class Engine {
       this.poiManager = new POIManager({
         scene: this.scene,
         camera: camera,
+        renderer: renderer,
         onPOISelect: (data) => this.onPOISelected(data)
       });
     }
@@ -79,6 +80,8 @@ export class Engine {
     if (renderer && camera && !this.xrInitialized) {
       this.initWebXR(renderer, camera);
       this.xrInitialized = true;
+      const center = this.splatManager.getModelCenter();
+      this.setPivotOffset(center);
     }
   }
 
@@ -236,5 +239,27 @@ export class Engine {
    */
   getPOIManager() {
     return this.poiManager;
+  }
+
+  /**
+   * WebXR 인터랙션 피벗(시각적 중심) 오프셋 설정
+   */
+  setPivotOffset(offset) {
+    if (this.webXRManager) {
+      let vec = offset;
+      if (Array.isArray(offset)) {
+        vec = new THREE.Vector3(offset[0], offset[1], offset[2]);
+      }
+      this.webXRManager.setPivotOffset(vec);
+    }
+  }
+
+  /**
+   * WebXR 모델 위치 및 시점 사용자 정면 재정합
+   */
+  recenterXR() {
+    if (this.webXRManager?.interactionManager) {
+      this.webXRManager.interactionManager.initViewPosition();
+    }
   }
 }

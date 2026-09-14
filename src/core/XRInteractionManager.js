@@ -80,6 +80,9 @@ export class XRInteractionManager {
     this.initialModelPos = new THREE.Vector3();
     this.initialModelQuat = new THREE.Quaternion();
 
+    // 오브젝트 중심 피벗 오프셋 (기본 Bonsai visual center: Y=1.15)
+    this.pivotOffset = options.pivotOffset ? new THREE.Vector3().copy(options.pivotOffset) : new THREE.Vector3(0, 1.15, 0);
+
     // 버튼 디바운싱 & 호버 상태
     this._wasRecenterPressed = false;
     this._wasPresetPressed = false;
@@ -103,8 +106,18 @@ export class XRInteractionManager {
     this._tempCamDir = new THREE.Vector3();
     this._tempRayOrigin = new THREE.Vector3();
     this._tempRayDirection = new THREE.Vector3();
+    this._tempPivotScaled = new THREE.Vector3();
+    this._tempPivotRotated = new THREE.Vector3();
+    this._meshWorldPos = new THREE.Vector3();
 
     this.bindControllerEvents();
+  }
+
+  setPivotOffset(offset) {
+    if (offset) {
+      this.pivotOffset.copy(offset);
+      this.applyTransform();
+    }
   }
 
   setPOIManager(poiManager) {
@@ -192,7 +205,7 @@ export class XRInteractionManager {
   }
 
   /**
-   * VR 진입 시 사용자의 정면 눈높이 위치로 모델 초기 배치
+   * VR 진입 시 사용자의 정면 눈높이 위치로 모델 초기 배치 (모델 시각적 중심 피벗 정렬)
    */
   initViewPosition() {
     const cam = this.getActiveCamera();
@@ -208,9 +221,9 @@ export class XRInteractionManager {
       this._tempCamDir.normalize();
     }
 
-    // 시선 정면 1.3m, 눈높이 살짝 아래(-0.15m)에 편안하게 배치
+    // 시선 정면 1.3m, 눈높이 살짝 아래(-0.10m)에 모델의 시각적 중심(Pivot) 배치
     this.targetPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 1.3);
-    this.targetPosition.y = Math.max(0.4, this._tempCamPos.y - 0.15);
+    this.targetPosition.y = Math.max(0.6, this._tempCamPos.y - 0.10);
 
     const yaw = Math.atan2(this._tempCamDir.x, this._tempCamDir.z) + Math.PI;
     this.targetQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -220,6 +233,11 @@ export class XRInteractionManager {
     this.modelPosition.copy(this.targetPosition);
     this.modelQuaternion.copy(this.targetQuaternion);
     this.modelScale = this.targetScale;
+
+    // 활성 컨트롤러 조작 상태 초기화 (모델 전환 시 잔여 인터랙션 해제)
+    this.activeRotateController = null;
+    this.activePanController = null;
+    this.isTwoHandGrabbing = false;
 
     this.applyTransform();
   }
@@ -242,11 +260,16 @@ export class XRInteractionManager {
     }
 
     this.targetPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 1.3);
-    this.targetPosition.y = Math.max(0.4, this._tempCamPos.y - 0.15);
+    this.targetPosition.y = Math.max(0.6, this._tempCamPos.y - 0.10);
 
     const yaw = Math.atan2(this._tempCamDir.x, this._tempCamDir.z) + Math.PI;
     this.targetQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     this.targetScale = 1.0;
+
+    // 활성 컨트롤러 조작 상태 초기화
+    this.activeRotateController = null;
+    this.activePanController = null;
+    this.isTwoHandGrabbing = false;
 
     if (sourceController) {
       this.triggerHaptic(sourceController, 0.6, 25);
@@ -261,26 +284,34 @@ export class XRInteractionManager {
   }
 
   /**
-   * 모델 트랜스폼 적용 (오브젝트 자체의 중심을 기준으로 회전/스케일 적용)
+   * 모델 트랜스폼 적용 (오브젝트 자체의 중심 피벗을 기준으로 회전/스케일 적용)
    */
   applyTransform() {
     try {
+      // 오브젝트 중심 피벗 계산:
+      // modelPosition은 사용자가 원하는 모델 시각적 중심(Pivot)의 월드 좌표입니다.
+      // 메쉬 및 POI 그룹의 로컬 원점(0,0,0)은 피벗으로부터 -pivotOffset 만큼 떨어져 있으므로:
+      // MeshWorldPos = modelPosition - (modelQuaternion * (pivotOffset * modelScale))
+      this._tempPivotScaled.copy(this.pivotOffset).multiplyScalar(this.modelScale);
+      this._tempPivotRotated.copy(this._tempPivotScaled).applyQuaternion(this.modelQuaternion);
+      this._meshWorldPos.copy(this.modelPosition).sub(this._tempPivotRotated);
+
       const splatMesh = this.splatManager?.getSplatMesh();
       if (splatMesh) {
-        splatMesh.position.copy(this.modelPosition);
+        splatMesh.position.copy(this._meshWorldPos);
         splatMesh.quaternion.copy(this.modelQuaternion);
         splatMesh.scale.setScalar(this.modelScale);
         if (typeof splatMesh.updateTransforms === 'function') {
           splatMesh.updateTransforms();
         }
       } else if (this.targetScene) {
-        this.targetScene.position.copy(this.modelPosition);
+        this.targetScene.position.copy(this._meshWorldPos);
         this.targetScene.quaternion.copy(this.modelQuaternion);
         this.targetScene.scale.setScalar(this.modelScale);
       }
 
       if (this.poiManager && this.poiManager.poiGroup) {
-        this.poiManager.poiGroup.position.copy(this.modelPosition);
+        this.poiManager.poiGroup.position.copy(this._meshWorldPos);
         this.poiManager.poiGroup.quaternion.copy(this.modelQuaternion);
         this.poiManager.poiGroup.scale.setScalar(this.modelScale);
       }
@@ -441,7 +472,7 @@ export class XRInteractionManager {
     if (presetTogglePressed) {
       if (!this._wasPresetPressed) {
         this._wasPresetPressed = true;
-        if (typeof this.onModelToggle === 'function') {
+        if (typeof this.onModelToggle === 'function' && !this.splatManager?.isLoading) {
           this.triggerHaptic(presetToggleSource, 0.7, 30);
           this.onModelToggle();
         }

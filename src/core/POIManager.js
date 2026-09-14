@@ -14,6 +14,7 @@ export class POIManager {
   constructor(options = {}) {
     this.scene = options.scene;
     this.camera = options.camera;
+    this.renderer = options.renderer || null;
     this.onPOISelect = options.onPOISelect || (() => {});
 
     this.poiGroup = new THREE.Group();
@@ -420,10 +421,13 @@ export class POIManager {
     }
 
     // VR 플로팅 카드 빌보드(항상 사용자의 시선 카메라를 정면으로 바라봄)
-    if (this.vrCardMesh && this.vrCardMesh.visible && this.camera) {
-      const camWorldPos = new THREE.Vector3();
-      this.camera.getWorldPosition(camWorldPos);
-      this.vrCardMesh.lookAt(camWorldPos);
+    if (this.vrCardMesh && this.vrCardMesh.visible) {
+      const activeCam = (this.renderer?.xr?.isPresenting) ? this.renderer.xr.getCamera() : this.camera;
+      if (activeCam) {
+        const camWorldPos = new THREE.Vector3();
+        activeCam.getWorldPosition(camWorldPos);
+        this.vrCardMesh.lookAt(camWorldPos);
+      }
 
       // 선택된 핀이 모델과 함께 이동할 경우 카드의 월드 위치도 동기화
       if (this.selectedPin) {

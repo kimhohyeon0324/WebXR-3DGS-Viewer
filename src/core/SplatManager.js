@@ -23,6 +23,7 @@ export class SplatManager {
     this.currentSource = null;
     this.currentSceneOptions = {};
     this.isLoading = false;
+    this.onXRFrameCallback = null;
 
     // 현재 렌더 튜닝 파라미터 상태 (기본값)
     this.renderSettings = {
@@ -88,31 +89,41 @@ export class SplatManager {
   enterVR(onXRFrame = null) {
     if (!this.viewer) return;
 
+    if (onXRFrame) {
+      this.onXRFrameCallback = onXRFrame;
+    }
+
     if (this.viewer.requestFrameId) {
       cancelAnimationFrame(this.viewer.requestFrameId);
       this.viewer.requestFrameId = null;
     }
+
+    this.ensureVRAnimationLoop();
+    console.log('SplatManager: WebXR 스테레오 렌더 루프 가동');
+  }
+
+  /**
+   * WebXR VR 전용 렌더 루프 가동 및 유지 (씬 전환 시 덮어쓰기 방지)
+   */
+  ensureVRAnimationLoop() {
+    if (!this.viewer || !this.viewer.renderer) return;
 
     this.viewer.webXRActive = true;
     this.viewer.webXRMode = GaussianSplats3D.WebXRMode.VR;
     this.viewer.renderMode = GaussianSplats3D.RenderMode.Always;
     this.viewer.forceRenderNextFrame();
 
-    if (this.viewer.renderer && this.viewer.selfDrivenUpdateFunc) {
-      this.viewer.renderer.setAnimationLoop((time, frame) => {
-        try {
-          if (typeof onXRFrame === 'function') {
-            onXRFrame(time, frame);
-          }
-          this.viewer.forceRenderNextFrame();
-          this.viewer.selfDrivenUpdate();
-        } catch (err) {
-          console.error('[WebXR AnimationLoop Error]:', err);
+    this.viewer.renderer.setAnimationLoop((time, frame) => {
+      try {
+        if (typeof this.onXRFrameCallback === 'function') {
+          this.onXRFrameCallback(time, frame);
         }
-      });
-    }
-
-    console.log('SplatManager: WebXR 스테레오 렌더 루프 가동');
+        this.viewer.forceRenderNextFrame();
+        this.viewer.selfDrivenUpdate();
+      } catch (err) {
+        console.error('[WebXR AnimationLoop Error]:', err);
+      }
+    });
   }
 
   /**
@@ -127,6 +138,7 @@ export class SplatManager {
 
     this.viewer.webXRActive = false;
     this.viewer.webXRMode = GaussianSplats3D.WebXRMode.None;
+    this.onXRFrameCallback = null;
 
     if (this.viewer.selfDrivenMode && this.viewer.selfDrivenUpdateFunc) {
       this.viewer.requestFrameId = requestAnimationFrame(this.viewer.selfDrivenUpdateFunc);
@@ -185,7 +197,10 @@ export class SplatManager {
 
       await this.viewer.addSplatScene(pathOrFile, defaultOptions);
 
-      if (!this.viewer.running) {
+      if (this.viewer.webXRActive) {
+        // WebXR VR 활성화 중 씬 전환 시 VR 렌더 루프 및 컨트롤러 인터랙션 보존
+        this.ensureVRAnimationLoop();
+      } else if (!this.viewer.selfDrivenModeRunning) {
         this.viewer.start();
       }
 
@@ -326,5 +341,29 @@ export class SplatManager {
 
   getSplatMesh() {
     return this.viewer ? this.viewer.splatMesh : null;
+  }
+
+  /**
+   * 모델의 시각적/기하학적 중심점(피벗) 반환
+   */
+  getModelCenter() {
+    if (this.currentSceneOptions?.cameraLookAt) {
+      const lookAt = this.currentSceneOptions.cameraLookAt;
+      return new THREE.Vector3(lookAt[0], lookAt[1], lookAt[2]);
+    }
+    const splatMesh = this.getSplatMesh();
+    if (splatMesh && typeof splatMesh.computeBoundingBox === 'function') {
+      try {
+        const box = splatMesh.computeBoundingBox(true);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        if (Number.isFinite(center.x) && Number.isFinite(center.y) && Number.isFinite(center.z)) {
+          return center;
+        }
+      } catch (e) {
+        console.warn('[SplatManager] computeBoundingBox failed:', e);
+      }
+    }
+    return new THREE.Vector3(0, 1.0, 0);
   }
 }

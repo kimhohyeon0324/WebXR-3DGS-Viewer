@@ -218,4 +218,14 @@ export class WebXRManager {
   getCameraRig() {
     return this.cameraRig;
   }
+
+  getInteractionManager() {
+    return this.interactionManager;
+  }
+
+  setPivotOffset(offset) {
+    if (this.interactionManager) {
+      this.interactionManager.setPivotOffset(offset);
+    }
+  }
 }
