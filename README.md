@@ -3,6 +3,7 @@
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 60~90 FPS의 안정적인 공간 탐색과 6DoF 인터랙션을 제공합니다.
 
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-r160-black.svg)](https://threejs.org/)
 [![WebXR](https://img.shields.io/badge/WebXR-Meta%20Quest%202%2F3%2FPro-blue.svg)](https://immersiveweb.dev/)
 [![WebGL 2.0](https://img.shields.io/badge/WebGL-2.0-990000.svg)](https://www.khronos.org/webgl/)
@@ -11,7 +12,7 @@
 
 ---
 
-### 메인 뷰어 실행 화면
+## 데모 미리보기
 
 | Bonsai Tree (경량 .ksplat 씬) | Golden Dragon (.splat 씬) |
 | :---: | :---: |
@@ -77,13 +78,13 @@ flowchart TB
 
 ---
 
-## 4. 핵심 트러블슈팅 및 최적화
+## 4. 핵심 트러블슈팅 및 기술적 해결
 
 ### 1) 모바일 HMD(Meta Quest)를 위한 GPU 연산 부하 최적화
 * **문제 현상**:
   - Meta Quest의 모바일 프로세서는 반투명 입자가 여러 겹 겹치는 화면 덧칠 연산에 취약하여, 양안 VR 렌더링 시 프레임이 45fps 이하로 급락하는 현상 발생.
 * **해결 방법**:
-  - **투명 가우시안 계산 제외 (Alpha Cutoff)**: 형태에 거의 영향을 주지 않는 흐릿하고 투명한 입자들을 렌더링 계산에서 미리 제외하여 연산량을 30% 이상 절감.
+  - **투명 가우시안 계산 제외 (Alpha Cutoff)**: 불투명도 임계값 이하의 미세 입자 래스터라이제이션을 스킵함으로써, 화면 품질을 온전히 보존하면서도 유효 연산 입자 수를 30% 이상 절감.
   - **입자 크기 미세 조절 (Splat Scale)**: 개별 입자의 크기를 살짝 줄여 입자들끼리 겹치는 면적을 줄이고 그래픽 메모리 대역폭 부담을 완화.
   - **실시간 GPU 튜닝 패널**: 새로고침 없이 화면에서 입자 크기, 투명도 컷오프, 점군(Point Cloud) 모드를 즉시 조절하며 최적의 프레임을 찾을 수 있는 UI 구축.
 
@@ -124,10 +125,16 @@ flowchart TB
 
 ## 6. 빠른 시작
 
-본 프로젝트는 특정 네트워크망이나 외부 백엔드 서버에 의존하지 않는 **100% 독립형 SPA** 구조로 제작되었습니다.
+### 사전 요구사항
+* [Node.js](https://nodejs.org/) v20.0.0 이상
 
-### 1) 의존성 설치
+### 1) 저장소 클론 및 패키지 설치
 ```bash
+# 저장소 클론
+git clone https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer.git
+cd WebXR-3DGS-Viewer
+
+# 의존성 설치
 npm install
 ```
 
@@ -135,17 +142,15 @@ npm install
 ```bash
 npm run dev
 ```
-- 서버가 실행되면 로컬 네트워크 IPv4가 자동 탐지되어 터미널에 출력됩니다:
-  ```
-  ➜  Local:   https://localhost:5173/
-  ➜  Network: https://<현재-PC-IP>:5173/
-  ```
+> `npm run dev` 실행 시 Vite HTTPS 개발 서버(포트 5173)가 구동되며, 현재 PC의 실제 네트워크 IP가 콘솔에 자동 출력됩니다.
+
+* **PC 3D 뷰어**: `https://localhost:5173/`
 
 ### 3) 프로덕션 빌드
 ```bash
 npm run build
 ```
-- 빌드 결과물은 `dist/` 디렉토리에 정적 파일로 생성되며, Vercel / Netlify / GitHub Pages 등에 즉시 배포할 수 있습니다.
+> 빌드 결과물은 `dist/` 디렉토리에 정적 파일로 생성되며, Vercel / Netlify / GitHub Pages 등에 즉시 배포할 수 있는 100% 독립형 SPA 구조입니다.
 
 ---
 
