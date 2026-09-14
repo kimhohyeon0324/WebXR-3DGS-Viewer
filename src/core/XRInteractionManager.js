@@ -184,14 +184,22 @@ export class XRInteractionManager {
     });
   }
 
+  getActiveCamera() {
+    if (this.renderer?.xr?.isPresenting) {
+      return this.renderer.xr.getCamera();
+    }
+    return this.camera;
+  }
+
   /**
    * VR 진입 시 사용자의 정면 눈높이 위치로 모델 초기 배치
    */
   initViewPosition() {
-    if (!this.camera) return;
+    const cam = this.getActiveCamera();
+    if (!cam) return;
 
-    this.camera.getWorldPosition(this._tempCamPos);
-    this.camera.getWorldDirection(this._tempCamDir);
+    cam.getWorldPosition(this._tempCamPos);
+    cam.getWorldDirection(this._tempCamDir);
 
     this._tempCamDir.y = 0;
     if (this._tempCamDir.lengthSq() < 0.001) {
@@ -220,10 +228,11 @@ export class XRInteractionManager {
    * 시선 정면으로 모델 즉시/부드럽게 복귀 (Recenter)
    */
   recenterView(sourceController = null) {
-    if (!this.camera) return;
+    const cam = this.getActiveCamera();
+    if (!cam) return;
 
-    this.camera.getWorldPosition(this._tempCamPos);
-    this.camera.getWorldDirection(this._tempCamDir);
+    cam.getWorldPosition(this._tempCamPos);
+    cam.getWorldDirection(this._tempCamDir);
 
     this._tempCamDir.y = 0;
     if (this._tempCamDir.lengthSq() < 0.001) {
@@ -255,21 +264,28 @@ export class XRInteractionManager {
    * 모델 트랜스폼 적용 (오브젝트 자체의 중심을 기준으로 회전/스케일 적용)
    */
   applyTransform() {
-    const splatMesh = this.splatManager?.getSplatMesh();
-    if (splatMesh) {
-      splatMesh.position.copy(this.modelPosition);
-      splatMesh.quaternion.copy(this.modelQuaternion);
-      splatMesh.scale.setScalar(this.modelScale);
-    } else if (this.targetScene) {
-      this.targetScene.position.copy(this.modelPosition);
-      this.targetScene.quaternion.copy(this.modelQuaternion);
-      this.targetScene.scale.setScalar(this.modelScale);
-    }
+    try {
+      const splatMesh = this.splatManager?.getSplatMesh();
+      if (splatMesh) {
+        splatMesh.position.copy(this.modelPosition);
+        splatMesh.quaternion.copy(this.modelQuaternion);
+        splatMesh.scale.setScalar(this.modelScale);
+        if (typeof splatMesh.updateTransforms === 'function') {
+          splatMesh.updateTransforms();
+        }
+      } else if (this.targetScene) {
+        this.targetScene.position.copy(this.modelPosition);
+        this.targetScene.quaternion.copy(this.modelQuaternion);
+        this.targetScene.scale.setScalar(this.modelScale);
+      }
 
-    if (this.poiManager && this.poiManager.poiGroup) {
-      this.poiManager.poiGroup.position.copy(this.modelPosition);
-      this.poiManager.poiGroup.quaternion.copy(this.modelQuaternion);
-      this.poiManager.poiGroup.scale.setScalar(this.modelScale);
+      if (this.poiManager && this.poiManager.poiGroup) {
+        this.poiManager.poiGroup.position.copy(this.modelPosition);
+        this.poiManager.poiGroup.quaternion.copy(this.modelQuaternion);
+        this.poiManager.poiGroup.scale.setScalar(this.modelScale);
+      }
+    } catch (e) {
+      console.warn('[XRInteractionManager] applyTransform catch:', e);
     }
   }
 
@@ -279,9 +295,12 @@ export class XRInteractionManager {
     this.activePanController = null;
     this.isTwoHandGrabbing = false;
 
+    // 세션 진입 즉시 1차 초기 위치 동기화 (0,0,0 잔류 방지)
+    this.initViewPosition();
+
+    // HMD 공간 트래킹 행렬이 안정화되는 250ms 시점에 정밀 재배치 및 POI 카드 활성화
     setTimeout(() => {
       this.initViewPosition();
-      // VR 세션 진입 시 3D POI 정보 카드를 즉시 표시
       if (this.poiManager) {
         this.poiManager.showDefaultVRCard();
       }
@@ -340,9 +359,14 @@ export class XRInteractionManager {
       const isGrip = gripEvent || gripGamepad;
 
       // 3) 마우스 휠 대응: 썸스틱 상/하 감지 (확대 / 축소)
-      if (gamepad?.axes && gamepad.axes.length >= 4) {
-        const axisY = gamepad.axes[3]; // WebXR 표준 Gamepad: axes[3] = Y축 (전/후)
-        if (Math.abs(axisY) > 0.12) {
+      if (gamepad?.axes) {
+        let axisY = 0;
+        if (gamepad.axes.length >= 4 && Math.abs(gamepad.axes[3]) > 0.12) {
+          axisY = gamepad.axes[3];
+        } else if (gamepad.axes.length >= 2 && Math.abs(gamepad.axes[1]) > 0.12) {
+          axisY = gamepad.axes[1];
+        }
+        if (Number.isFinite(axisY) && Math.abs(axisY) > 0.12) {
           stickZoom += axisY;
         }
       }
@@ -432,7 +456,9 @@ export class XRInteractionManager {
     if (Math.abs(stickZoom) > 0.12) {
       const zoomRate = 1.2;
       const factor = 1.0 - (stickZoom * zoomRate * Math.min(delta, 0.05));
-      this.targetScale = Math.max(this.minScale, Math.min(this.maxScale, this.targetScale * factor));
+      if (Number.isFinite(factor) && factor > 0) {
+        this.targetScale = Math.max(this.minScale, Math.min(this.maxScale, this.targetScale * factor));
+      }
     }
 
     // ==========================================
@@ -485,7 +511,13 @@ export class XRInteractionManager {
     const smoothFactor = 1.0 - Math.exp(-22 * Math.min(delta, 0.05));
     this.modelPosition.lerp(this.targetPosition, smoothFactor);
     this.modelQuaternion.slerp(this.targetQuaternion, smoothFactor);
-    this.modelScale += (this.targetScale - this.modelScale) * smoothFactor;
+    this.modelQuaternion.normalize();
+    if (Number.isFinite(this.targetScale) && this.targetScale > 0) {
+      this.modelScale += (this.targetScale - this.modelScale) * smoothFactor;
+    } else {
+      this.targetScale = 1.0;
+      this.modelScale = 1.0;
+    }
 
     this.applyTransform();
   }
@@ -521,6 +553,7 @@ export class XRInteractionManager {
 
       // 최종 회전: 궤도 드래그 회전 * 손목 회전 * 초기 모델 각도
       this.targetQuaternion.copy(this._orbitQuat).multiply(this._deltaQuat).multiply(this.rotateStartModelQuat);
+      this.targetQuaternion.normalize();
     }
   }
 
@@ -582,6 +615,7 @@ export class XRInteractionManager {
         this._u1.copy(this._currHandsVec).normalize();
         this._deltaQuat.setFromUnitVectors(this._u0, this._u1);
         this.targetQuaternion.multiplyQuaternions(this._deltaQuat, this.initialModelQuat);
+        this.targetQuaternion.normalize();
 
         // 3. 위치 이동 (두 손의 중심점 추종 - 2.5배로 상향 조정)
         this._deltaMidpoint.subVectors(this._currMidpoint, this.initialMidpoint).multiplyScalar(2.5);

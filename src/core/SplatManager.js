@@ -62,6 +62,24 @@ export class SplatManager {
       sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant,
       logLevel: GaussianSplats3D.LogLevel.None
     });
+
+    // GaussianSplats3D WebXR stereo uniform 계산 시 xrCamera.projectionMatrix.elements[0]이 0 또는 비정상일 때 NaN/Infinity 방지 가드
+    if (this.viewer && typeof this.viewer.adjustForWebXRStereo === 'function') {
+      this.viewer.adjustForWebXRStereo = (renderDimensions) => {
+        try {
+          if (this.viewer.camera && this.viewer.webXRActive) {
+            const xrCamera = this.viewer.renderer?.xr?.getCamera();
+            const xrCameraProj00 = xrCamera?.projectionMatrix?.elements?.[0];
+            const cameraProj00 = this.viewer.camera?.projectionMatrix?.elements?.[0];
+            if (Number.isFinite(xrCameraProj00) && xrCameraProj00 > 0.0001 && Number.isFinite(cameraProj00) && cameraProj00 > 0.0001) {
+              renderDimensions.x *= (cameraProj00 / xrCameraProj00);
+            }
+          }
+        } catch (err) {
+          console.warn('[SplatManager] adjustForWebXRStereo guard catch:', err);
+        }
+      };
+    }
   }
 
   /**
@@ -76,13 +94,21 @@ export class SplatManager {
     }
 
     this.viewer.webXRActive = true;
+    this.viewer.webXRMode = GaussianSplats3D.WebXRMode.VR;
+    this.viewer.renderMode = GaussianSplats3D.RenderMode.Always;
+    this.viewer.forceRenderNextFrame();
 
     if (this.viewer.renderer && this.viewer.selfDrivenUpdateFunc) {
       this.viewer.renderer.setAnimationLoop((time, frame) => {
-        if (typeof onXRFrame === 'function') {
-          onXRFrame(time, frame);
+        try {
+          if (typeof onXRFrame === 'function') {
+            onXRFrame(time, frame);
+          }
+          this.viewer.forceRenderNextFrame();
+          this.viewer.selfDrivenUpdate();
+        } catch (err) {
+          console.error('[WebXR AnimationLoop Error]:', err);
         }
-        this.viewer.selfDrivenUpdate();
       });
     }
 
@@ -100,6 +126,7 @@ export class SplatManager {
     }
 
     this.viewer.webXRActive = false;
+    this.viewer.webXRMode = GaussianSplats3D.WebXRMode.None;
 
     if (this.viewer.selfDrivenMode && this.viewer.selfDrivenUpdateFunc) {
       this.viewer.requestFrameId = requestAnimationFrame(this.viewer.selfDrivenUpdateFunc);

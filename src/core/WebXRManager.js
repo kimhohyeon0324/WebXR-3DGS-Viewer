@@ -24,6 +24,7 @@ export class WebXRManager {
     this.buttonContainer = options.buttonContainer || document.body;
     this.poiManager = options.poiManager || null;
     this.splatManager = options.splatManager || null;
+    this.onModelToggle = options.onModelToggle || null;
     this.onSessionStart = options.onSessionStart || (() => {});
     this.onSessionEnd = options.onSessionEnd || (() => {});
 
@@ -80,8 +81,6 @@ export class WebXRManager {
 
     // 컨트롤러 설정
     this.setupControllers();
-
-    this.onModelToggle = options.onModelToggle || null;
 
     // 인터랙션 매니저 초기화
     this.interactionManager = new XRInteractionManager({

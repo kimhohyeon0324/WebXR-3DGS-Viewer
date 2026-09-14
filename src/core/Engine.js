@@ -98,11 +98,15 @@ export class Engine {
         this.clock.start();
         this.splatManager.enterVR((time, frame) => {
           const delta = this.clock.getDelta();
-          if (this.webXRManager) {
-            this.webXRManager.update(delta);
-          }
-          if (this.poiManager) {
-            this.poiManager.update(this.clock.getElapsedTime());
+          try {
+            if (this.webXRManager) {
+              this.webXRManager.update(delta);
+            }
+            if (this.poiManager) {
+              this.poiManager.update(this.clock.getElapsedTime());
+            }
+          } catch (err) {
+            console.error('[WebXR Frame Update Exception]:', err);
           }
         });
         this.onVRStateChanged(true);
