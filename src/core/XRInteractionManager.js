@@ -430,7 +430,7 @@ export class XRInteractionManager {
       this.grabStartModelPos.copy(this.targetPosition);
       this.triggerHaptic(controller, 0.5, 20);
     } else {
-      const oneHandSensitivity = 2.4; // 손의 움직임 변위를 2.4배로 증폭하여 쾌적한 이동 제공
+      const oneHandSensitivity = 3.5; // 손의 움직임 변위를 3.5배로 상향 증폭 (기존 2.4배 대비 1.45배 증가)
       this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos).multiplyScalar(oneHandSensitivity);
       this.targetPosition.copy(this.grabStartModelPos).add(this._deltaPos);
     }
@@ -477,8 +477,8 @@ export class XRInteractionManager {
         this._deltaQuat.setFromUnitVectors(this._u0, this._u1);
         this.targetQuaternion.multiplyQuaternions(this._deltaQuat, this.initialModelQuat);
 
-        // 3. 위치 이동 (두 손의 중심점 추종 - 1.8배 시원한 이동)
-        this._deltaMidpoint.subVectors(this._currMidpoint, this.initialMidpoint).multiplyScalar(1.8);
+        // 3. 위치 이동 (두 손의 중심점 추종 - 2.5배로 상향 조정)
+        this._deltaMidpoint.subVectors(this._currMidpoint, this.initialMidpoint).multiplyScalar(2.5);
         this.targetPosition.addVectors(this.initialModelPos, this._deltaMidpoint);
       }
     }
