@@ -51,14 +51,14 @@ export class POIManager {
       map: this.cardTexture,
       transparent: true,
       side: THREE.DoubleSide,
-      depthTest: true,
+      depthTest: false,
       depthWrite: false
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = 'VR_POI_InfoCard';
     mesh.visible = false;
-    mesh.renderOrder = 30; // 핀보다 상위에 렌더링
+    mesh.renderOrder = 300; // 핀 및 스플랫보다 최상위에 렌더링
     return mesh;
   }
 
@@ -240,31 +240,37 @@ export class POIManager {
     const coneMat = new THREE.MeshStandardMaterial({
       color: typeColor,
       emissive: typeColor,
-      emissiveIntensity: 0.85,
+      emissiveIntensity: 1.2,
       roughness: 0.15,
       metalness: 0.85,
-      depthTest: true
+      depthTest: false,
+      depthWrite: false
     });
     const cone = new THREE.Mesh(coneGeo, coneMat);
     cone.name = 'cone';
     pin.add(cone);
 
     // 2) 원뿔 상단에 얹힌 발광 화이트 코어 구체
-    const sphereRadius = 0.014;
+    const sphereRadius = 0.016;
     const sphereGeo = new THREE.SphereGeometry(sphereRadius, 16, 16);
-    const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const sphereMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      depthTest: false,
+      depthWrite: false
+    });
     const sphere = new THREE.Mesh(sphereGeo, sphereMat);
     sphere.position.y = coneHeight + sphereRadius * 0.7;
     sphere.name = 'sphere';
     pin.add(sphere);
 
     // 3) 수평 펄스 링 (원뿔 중간 높이에 배치하여 표면 간섭 방지)
-    const ringGeo = new THREE.RingGeometry(0.018, 0.032, 24);
+    const ringGeo = new THREE.RingGeometry(0.022, 0.040, 24);
     const ringMat = new THREE.MeshBasicMaterial({
       color: typeColor,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.80,
+      opacity: 0.85,
+      depthTest: false,
       depthWrite: false
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -273,19 +279,23 @@ export class POIManager {
     ring.name = 'ring';
     pin.add(ring);
 
-    // 4) 충돌 판정용 비가시 구체 (피킹용)
-    const hitGeo = new THREE.SphereGeometry(0.08, 8, 8);
-    const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+    // 4) 충돌 판정용 넉넉한 판정 구체 (피킹용 - 16cm 반경으로 조준 용이성 극대화)
+    const hitGeo = new THREE.SphereGeometry(0.16, 8, 8);
+    const hitMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
     const hitBox = new THREE.Mesh(hitGeo, hitMat);
     hitBox.position.y = coneHeight / 2;
     hitBox.userData = { isPOIHitBox: true, pinRef: pin };
     pin.add(hitBox);
 
-    // 렌더링 우선순위 부여
-    pin.renderOrder = 20;
-    cone.renderOrder = 21;
-    sphere.renderOrder = 22;
-    ring.renderOrder = 20;
+    // 렌더링 우선순위 부여 (3DGS 스플랫 위에 항시 선명하게 표시)
+    pin.renderOrder = 200;
+    cone.renderOrder = 201;
+    sphere.renderOrder = 202;
+    ring.renderOrder = 200;
 
     this.poiGroup.add(pin);
     this.pins.push(pin);
@@ -375,6 +385,16 @@ export class POIManager {
     }
   }
 
+  /**
+   * VR 진입 시 기본 또는 선택된 POI의 3D 정보 카드를 즉시 표시
+   */
+  showDefaultVRCard() {
+    if (this.pins.length > 0) {
+      const pin = this.selectedPin || this.pins[0];
+      this.selectPin(pin);
+    }
+  }
+
   update(time = 0) {
     for (let i = 0; i < this.pins.length; i++) {
       const pin = this.pins[i];
@@ -401,14 +421,16 @@ export class POIManager {
 
     // VR 플로팅 카드 빌보드(항상 사용자의 시선 카메라를 정면으로 바라봄)
     if (this.vrCardMesh && this.vrCardMesh.visible && this.camera) {
-      this.vrCardMesh.lookAt(this.camera.position);
+      const camWorldPos = new THREE.Vector3();
+      this.camera.getWorldPosition(camWorldPos);
+      this.vrCardMesh.lookAt(camWorldPos);
 
       // 선택된 핀이 모델과 함께 이동할 경우 카드의 월드 위치도 동기화
       if (this.selectedPin) {
         const pinWorldPos = new THREE.Vector3();
         this.selectedPin.getWorldPosition(pinWorldPos);
         this.vrCardMesh.position.copy(pinWorldPos);
-        this.vrCardMesh.position.y += 0.22;
+        this.vrCardMesh.position.y += 0.24;
       }
     }
   }

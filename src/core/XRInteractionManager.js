@@ -232,6 +232,10 @@ export class XRInteractionManager {
       setTimeout(() => this.triggerHaptic(sourceController, 0.7, 30), 100);
     }
 
+    if (this.poiManager) {
+      this.poiManager.showDefaultVRCard();
+    }
+
     console.log('[XRInteractionManager] 뷰 복귀(Recenter) 실행');
   }
 
@@ -264,7 +268,11 @@ export class XRInteractionManager {
 
     setTimeout(() => {
       this.initViewPosition();
-    }, 200);
+      // VR 세션 진입 시 3D POI 정보 카드를 즉시 표시
+      if (this.poiManager) {
+        this.poiManager.showDefaultVRCard();
+      }
+    }, 250);
   }
 
   deactivate() {
@@ -411,7 +419,7 @@ export class XRInteractionManager {
   }
 
   /**
-   * 한 손 잡기: 1:1 위치 이동
+   * 한 손 잡기: 손의 움직임에 따라 모델 위치 이동 (감도 2.4배 증폭으로 빠르고 시원한 공간 이동)
    */
   handleOneHandGrab(controller) {
     controller.getWorldPosition(this._currCtrlPos);
@@ -422,7 +430,8 @@ export class XRInteractionManager {
       this.grabStartModelPos.copy(this.targetPosition);
       this.triggerHaptic(controller, 0.5, 20);
     } else {
-      this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos);
+      const oneHandSensitivity = 2.4; // 손의 움직임 변위를 2.4배로 증폭하여 쾌적한 이동 제공
+      this._deltaPos.copy(this._currCtrlPos).sub(this.grabStartControllerPos).multiplyScalar(oneHandSensitivity);
       this.targetPosition.copy(this.grabStartModelPos).add(this._deltaPos);
     }
   }
@@ -468,8 +477,8 @@ export class XRInteractionManager {
         this._deltaQuat.setFromUnitVectors(this._u0, this._u1);
         this.targetQuaternion.multiplyQuaternions(this._deltaQuat, this.initialModelQuat);
 
-        // 3. 위치 이동 (두 손의 중심점 추종)
-        this._deltaMidpoint.subVectors(this._currMidpoint, this.initialMidpoint);
+        // 3. 위치 이동 (두 손의 중심점 추종 - 1.8배 시원한 이동)
+        this._deltaMidpoint.subVectors(this._currMidpoint, this.initialMidpoint).multiplyScalar(1.8);
         this.targetPosition.addVectors(this.initialModelPos, this._deltaMidpoint);
       }
     }
