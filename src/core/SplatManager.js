@@ -46,6 +46,8 @@ export class SplatManager {
    * GaussianSplats3D.Viewer 초기화
    */
   initViewer() {
+    const canUseSharedMemory = typeof window !== 'undefined' && !!window.crossOriginIsolated;
+
     this.viewer = new GaussianSplats3D.Viewer({
       rootElement: this.container,
       threeScene: this.threeScene,
@@ -54,8 +56,8 @@ export class SplatManager {
       initialCameraLookAt: this.defaultCameraConfig.initialCameraLookAt,
       useBuiltInControls: true,
       selfDrivenMode: true,
-      gpuAcceleratedSort: false, // 호환성 극대화 (브라우저 GPU 차이 방지)
-      sharedMemoryForWorkers: false, // SharedArrayBuffer CORS/보안 이슈 원천 차단
+      gpuAcceleratedSort: canUseSharedMemory, // SharedArrayBuffer 지원 시 GPU 가속 정렬 가동
+      sharedMemoryForWorkers: canUseSharedMemory, // Cross-Origin Isolation 시 제로카피 SharedArrayBuffer 활성화
       integerBasedSort: true,
       dynamicScene: false, // 로드 시점에 트랜스폼 베이킹(안정성 극대화)
       halfPrecisionCovariancesOnGPU: false,
@@ -139,7 +141,7 @@ export class SplatManager {
       const defaultOptions = {
         splatAlphaRemovalThreshold: this.renderSettings.alphaThreshold,
         showLoadingUI: false,
-        progressiveLoad: false,
+        progressiveLoad: true, // 점진적 스트리밍 렌더링 활성화 (첫 청크 도착 즉시 화면 렌더링 시작)
         position: [0, 1, 0],
         rotation: [0, 0, 0, 1],
         scale: [1.5, 1.5, 1.5],
@@ -235,14 +237,24 @@ export class SplatManager {
    * 기존 씬 해제
    */
   async clearCurrentScene() {
-    if (this.viewer && this.viewer.splatMesh && this.viewer.splatMesh.scenes) {
-      const sceneCount = this.viewer.splatMesh.scenes.length;
-      if (sceneCount > 0) {
-        const indexes = Array.from({ length: sceneCount }, (_, i) => i);
+    if (this.viewer) {
+      // 점진적 백그라운드 다운로드/빌드가 남아있는 경우 안전하게 대기
+      if (this.viewer.splatSceneDownloadAndBuildPromise) {
         try {
-          await this.viewer.removeSplatScenes(indexes, false);
+          await this.viewer.splatSceneDownloadAndBuildPromise;
         } catch (e) {
-          console.warn('SplatManager: 기존 씬 삭제 중 경고:', e);
+          console.warn('SplatManager: 이전 씬 다운로드 완료 대기 중 예외:', e);
+        }
+      }
+      if (this.viewer.splatMesh && this.viewer.splatMesh.scenes) {
+        const sceneCount = this.viewer.splatMesh.scenes.length;
+        if (sceneCount > 0) {
+          const indexes = Array.from({ length: sceneCount }, (_, i) => i);
+          try {
+            await this.viewer.removeSplatScenes(indexes, false);
+          } catch (e) {
+            console.warn('SplatManager: 기존 씬 삭제 중 경고:', e);
+          }
         }
       }
     }
