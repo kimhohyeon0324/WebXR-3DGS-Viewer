@@ -46,7 +46,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (overlayUI) {
         overlayUI.updateSceneInfo(sceneData);
       }
-      loadingIndicator.hide();
+      setTimeout(() => {
+        loadingIndicator.hide();
+      }, 400);
     },
     onVRStateChanged: (isActive) => {
       if (overlayUI) {
