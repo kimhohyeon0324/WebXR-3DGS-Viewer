@@ -1,9 +1,13 @@
+import { PRESET_MODELS, DEFAULT_MODEL_KEY } from '../data/modelPresets.js';
+
 /**
  * 뷰어 HUD 및 사용자 인터랙션 오버레이 관리자
  */
 export class OverlayUI {
   /**
    * @param {Object} options
+   * @param {Object} [options.presets] - 모델 프리셋 사전 객체 (미지정 시 PRESET_MODELS 사용)
+   * @param {string} [options.initialPresetKey] - 초기 선택 프리셋 키
    * @param {Function} options.onModelSelect - 프리셋 선택 콜백 (presetKey)
    * @param {Function} options.onFileLoad - 로컬 파일 로드 콜백 (File)
    * @param {Function} options.onResetView - 시점 리셋 콜백
@@ -12,6 +16,8 @@ export class OverlayUI {
    * @param {Function} [options.onPointCloudToggle] - 포인트 클라우드 모드 토글
    */
   constructor(options = {}) {
+    this.presets = options.presets || PRESET_MODELS;
+    this.initialPresetKey = options.initialPresetKey || DEFAULT_MODEL_KEY;
     this.onModelSelect = options.onModelSelect || (() => {});
     this.onFileLoad = options.onFileLoad || (() => {});
     this.onResetView = options.onResetView || (() => {});
@@ -39,9 +45,35 @@ export class OverlayUI {
     this.labelAlphaCutoff = document.getElementById('label-alpha-cutoff');
     this.togglePointCloud = document.getElementById('toggle-point-cloud');
 
+    this.initModelSelectOptions();
     this.initEventListeners();
     this.initDragAndDrop();
     this.initSettingsPanel();
+  }
+
+  /**
+   * modelPresets 데이터 기반으로 셀렉트 박스 옵션을 동적 자동 렌더링
+   */
+  initModelSelectOptions() {
+    if (!this.modelSelect || !this.presets) return;
+
+    this.modelSelect.innerHTML = '';
+
+    for (const [key, preset] of Object.entries(this.presets)) {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = preset.name || key;
+      this.modelSelect.appendChild(option);
+    }
+
+    const customOption = document.createElement('option');
+    customOption.value = 'custom';
+    customOption.textContent = '사용자 로컬 파일 (.ply / .splat)';
+    this.modelSelect.appendChild(customOption);
+
+    if (this.initialPresetKey && this.presets[this.initialPresetKey]) {
+      this.modelSelect.value = this.initialPresetKey;
+    }
   }
 
   initEventListeners() {

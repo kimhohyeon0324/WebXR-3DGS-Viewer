@@ -1,6 +1,28 @@
 import * as THREE from 'three';
 
 /**
+ * 3D 변환 및 물리 조작 기본 설정 상수
+ */
+export const DEFAULT_TRANSFORM_CONFIG = {
+  DEFAULT_PIVOT: [0, 1.15, 0], // Bonsai 물체 정렬 기준 시각적 피벗 좌표 유지
+  MIN_SCALE: 0.1,
+  MAX_SCALE: 6.0,
+  ROTATION_POS_SENSITIVITY: 4.0,
+  ROTATION_WRIST_SENSITIVITY: 1.8,
+  PAN_SENSITIVITY: 3.5,
+  TWO_HAND_MOVE_MULTIPLIER: 2.5,
+  TWO_HAND_MIN_INITIAL_DIST: 0.05,
+  TWO_HAND_MIN_CURRENT_DIST: 0.02,
+  THUMBSTICK_ZOOM_RATE: 1.2,
+  THUMBSTICK_DEADZONE: 0.12,
+  EMA_DAMPING_RATE: 22,
+  MAX_DELTA_TIME: 0.05,
+  DEFAULT_VIEW_DISTANCE: 1.3,
+  DEFAULT_VIEW_HEIGHT_OFFSET: -0.10,
+  MIN_VIEW_HEIGHT: 0.6
+};
+
+/**
  * 3D Spatial Transform & Mathematical Physics Engine
  * 
  * 피벗 역보정(Pivot Offset Compensation), 단일 축 분리 쿼터니언 회전(Single-Axis Pitch/Yaw),
@@ -9,11 +31,17 @@ import * as THREE from 'three';
 export class ObjectTransformController {
   /**
    * @param {Object} [options]
+   * @param {Object} [options.config] - 사용자 커스텀 변환/물리 설정 오버라이드
    * @param {THREE.Vector3} [options.pivotOffset] - 오브젝트 중심 피벗 오프셋
    * @param {number} [options.minScale=0.1]
    * @param {number} [options.maxScale=6.0]
    */
   constructor(options = {}) {
+    this.config = {
+      ...DEFAULT_TRANSFORM_CONFIG,
+      ...(options.config || {})
+    };
+
     // 렌더링에 실시간 적용되는 현재 트랜스폼
     this.modelPosition = new THREE.Vector3(0, 0, 0);
     this.modelQuaternion = new THREE.Quaternion();
@@ -25,13 +53,13 @@ export class ObjectTransformController {
     this.targetScale = 1.0;
 
     // 조작 제약 조건
-    this.minScale = options.minScale ?? 0.1;
-    this.maxScale = options.maxScale ?? 6.0;
+    this.minScale = options.minScale ?? this.config.MIN_SCALE;
+    this.maxScale = options.maxScale ?? this.config.MAX_SCALE;
 
-    // 오브젝트 중심 피벗 오프셋 (기본 Bonsai visual center: Y=1.15)
+    // 오브젝트 중심 피벗 오프셋
     this.pivotOffset = options.pivotOffset
       ? new THREE.Vector3().copy(options.pivotOffset)
-      : new THREE.Vector3(0, 1.15, 0);
+      : new THREE.Vector3(...this.config.DEFAULT_PIVOT);
 
     // 1. 단일 축 분리 회전 (Trigger Drag)
     // Left Trigger: X축 회전 (Pitch / 상하 수직 틸트)
@@ -131,9 +159,9 @@ export class ObjectTransformController {
       this._tempCamDir.normalize();
     }
 
-    // 시선 정면 1.3m, 눈높이 살짝 아래(-0.10m)에 모델의 시각적 중심(Pivot) 배치
-    this.targetPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 1.3);
-    this.targetPosition.y = Math.max(0.6, this._tempCamPos.y - 0.10);
+    // 시선 정면 배치 (상수 기반)
+    this.targetPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, this.config.DEFAULT_VIEW_DISTANCE);
+    this.targetPosition.y = Math.max(this.config.MIN_VIEW_HEIGHT, this._tempCamPos.y + this.config.DEFAULT_VIEW_HEIGHT_OFFSET);
 
     const yaw = Math.atan2(this._tempCamDir.x, this._tempCamDir.z) + Math.PI;
     this.targetQuaternion.setFromAxisAngle(this._yAxis, yaw);
@@ -164,8 +192,8 @@ export class ObjectTransformController {
       this._tempCamDir.normalize();
     }
 
-    this.targetPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 1.3);
-    this.targetPosition.y = Math.max(0.6, this._tempCamPos.y - 0.10);
+    this.targetPosition.copy(this._tempCamPos).addScaledVector(this._tempCamDir, this.config.DEFAULT_VIEW_DISTANCE);
+    this.targetPosition.y = Math.max(this.config.MIN_VIEW_HEIGHT, this._tempCamPos.y + this.config.DEFAULT_VIEW_HEIGHT_OFFSET);
 
     const yaw = Math.atan2(this._tempCamDir.x, this._tempCamDir.z) + Math.PI;
     this.targetQuaternion.setFromAxisAngle(this._yAxis, yaw);
@@ -224,8 +252,8 @@ export class ObjectTransformController {
     this.leftPrevCtrlPos.copy(this._currCtrlPos);
     this.leftPrevCtrlQuat.copy(currQuat);
 
-    const posSensitivity = 4.0;
-    const wristSensitivity = 1.8;
+    const posSensitivity = this.config.ROTATION_POS_SENSITIVITY;
+    const wristSensitivity = this.config.ROTATION_WRIST_SENSITIVITY;
     const deltaPitch = (-dy * posSensitivity) + (-wristPitchDelta * wristSensitivity);
 
     if (Math.abs(deltaPitch) > 0.0001) {
@@ -291,8 +319,8 @@ export class ObjectTransformController {
     this.rightPrevCtrlPos.copy(this._currCtrlPos);
     this.rightPrevCtrlQuat.copy(currQuat);
 
-    const posSensitivity = 4.0;
-    const wristSensitivity = 1.8;
+    const posSensitivity = this.config.ROTATION_POS_SENSITIVITY;
+    const wristSensitivity = this.config.ROTATION_WRIST_SENSITIVITY;
     const deltaYaw = (dxCam * posSensitivity) + (wristYawDelta * wristSensitivity);
 
     if (Math.abs(deltaYaw) > 0.0001) {
@@ -324,7 +352,7 @@ export class ObjectTransformController {
       this.panStartModelPos.copy(this.targetPosition);
       if (typeof onHaptic === 'function') onHaptic(controller, 0.4, 20);
     } else {
-      const panSensitivity = 3.5;
+      const panSensitivity = this.config.PAN_SENSITIVITY;
       this._deltaPos.copy(this._currCtrlPos).sub(this.panStartCtrlPos).multiplyScalar(panSensitivity);
       this.targetPosition.copy(this.panStartModelPos).add(this._deltaPos);
     }
@@ -354,7 +382,7 @@ export class ObjectTransformController {
 
     if (!this.isTwoHandGrabbing) {
       this.isTwoHandGrabbing = true;
-      this.initialHandsDistance = Math.max(0.05, currentDistance);
+      this.initialHandsDistance = Math.max(this.config.TWO_HAND_MIN_INITIAL_DIST, currentDistance);
       this.initialModelScale = this.targetScale;
       this.initialHandsVec.copy(this._currHandsVec);
       this.initialMidpoint.copy(this._currMidpoint);
@@ -366,7 +394,7 @@ export class ObjectTransformController {
         onHaptic(rightController, 0.6, 25);
       }
     } else {
-      if (this.initialHandsDistance > 0.05 && currentDistance > 0.02) {
+      if (this.initialHandsDistance > this.config.TWO_HAND_MIN_INITIAL_DIST && currentDistance > this.config.TWO_HAND_MIN_CURRENT_DIST) {
         // 1. 확대 / 축소 (오브젝트 로컬 중심)
         const scaleRatio = currentDistance / this.initialHandsDistance;
         const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.initialModelScale * scaleRatio));
@@ -388,7 +416,7 @@ export class ObjectTransformController {
         this.targetQuaternion.normalize();
 
         // 3. 위치 이동 (두 손의 중심점 추종)
-        this._deltaMidpoint.subVectors(this._currMidpoint, this.initialMidpoint).multiplyScalar(2.5);
+        this._deltaMidpoint.subVectors(this._currMidpoint, this.initialMidpoint).multiplyScalar(this.config.TWO_HAND_MOVE_MULTIPLIER);
         this.targetPosition.addVectors(this.initialModelPos, this._deltaMidpoint);
       }
     }
@@ -404,9 +432,9 @@ export class ObjectTransformController {
    * @param {number} delta
    */
   handleThumbstickZoom(stickZoom, delta = 0.016) {
-    if (Math.abs(stickZoom) <= 0.12) return;
-    const zoomRate = 1.2;
-    const factor = 1.0 - (stickZoom * zoomRate * Math.min(delta, 0.05));
+    if (Math.abs(stickZoom) <= this.config.THUMBSTICK_DEADZONE) return;
+    const zoomRate = this.config.THUMBSTICK_ZOOM_RATE;
+    const factor = 1.0 - (stickZoom * zoomRate * Math.min(delta, this.config.MAX_DELTA_TIME));
     if (Number.isFinite(factor) && factor > 0) {
       this.targetScale = Math.max(this.minScale, Math.min(this.maxScale, this.targetScale * factor));
     }
@@ -417,7 +445,7 @@ export class ObjectTransformController {
    * @param {number} delta
    */
   updateSmoothing(delta = 0.016) {
-    const smoothFactor = 1.0 - Math.exp(-22 * Math.min(delta, 0.05));
+    const smoothFactor = 1.0 - Math.exp(-this.config.EMA_DAMPING_RATE * Math.min(delta, this.config.MAX_DELTA_TIME));
 
     if (this._isValidVector(this.targetPosition)) {
       this.modelPosition.lerp(this.targetPosition, smoothFactor);

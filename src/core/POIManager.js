@@ -3,6 +3,34 @@ import { SpatialCardCanvas } from './poi/SpatialCardCanvas.js';
 import { POI_PRESETS } from '../data/poiPresets.js';
 
 /**
+ * 3D POI 핀 및 VR 인포 카드 기하학적 치수 및 비주얼 설정 상수
+ */
+export const POI_VISUAL_CONFIG = {
+  CONE_HEIGHT: 0.060,
+  CONE_RADIUS: 0.022,
+  CONE_SEGMENTS: 20,
+  SPHERE_RADIUS: 0.016,
+  SPHERE_SEGMENTS: 16,
+  SPHERE_Y_OFFSET_FACTOR: 0.7,
+  RING_INNER: 0.022,
+  RING_OUTER: 0.040,
+  RING_SEGMENTS: 24,
+  RING_Y_OFFSET: 0.025,
+  HITBOX_RADIUS: 0.16,
+  HITBOX_SEGMENTS: 8,
+  CARD_WIDTH: 0.42,
+  CARD_HEIGHT: 0.21,
+  CARD_Y_OFFSET: 0.22,
+  COLOR_HAPTIC: 0xf59e0b,
+  COLOR_DEFAULT: 0x00f0ff,
+  COLOR_CORE: 0xffffff,
+  RENDER_ORDER_PIN: 200,
+  RENDER_ORDER_CONE: 201,
+  RENDER_ORDER_SPHERE: 202,
+  RENDER_ORDER_CARD: 300
+};
+
+/**
  * 3D POI(Point of Interest) 메타데이터 핀 관리자
  * 3DGS 씬 내부의 시공간 메타데이터 핀 배치, 애니메이션, 레이캐스팅 피킹, WebGL 메모리 관리
  */
@@ -62,7 +90,7 @@ export class POIManager {
    * VR 세션 내에 텍스트와 메타데이터를 표시할 3D Canvas 텍스처 패널 생성
    */
   createVRCardMesh() {
-    const geometry = new THREE.PlaneGeometry(0.42, 0.21);
+    const geometry = new THREE.PlaneGeometry(POI_VISUAL_CONFIG.CARD_WIDTH, POI_VISUAL_CONFIG.CARD_HEIGHT);
     const material = new THREE.MeshBasicMaterial({
       map: this.cardTexture,
       transparent: true,
@@ -74,7 +102,7 @@ export class POIManager {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = 'VR_POI_InfoCard';
     mesh.visible = false;
-    mesh.renderOrder = 300; // 핀 및 스플랫보다 최상위에 렌더링
+    mesh.renderOrder = POI_VISUAL_CONFIG.RENDER_ORDER_CARD; // 핀 및 스플랫보다 최상위에 렌더링
     return mesh;
   }
 
@@ -122,12 +150,12 @@ export class POIManager {
 
     console.log(`[POIManager] 핀 생성됨 -> ID: ${data.id}, 좌표: (${data.coordinates.x.toFixed(3)}, ${data.coordinates.y.toFixed(3)}, ${data.coordinates.z.toFixed(3)})`);
 
-    const typeColor = data.type === 'haptic' ? 0xf59e0b : 0x00f0ff;
+    const typeColor = data.type === 'haptic' ? POI_VISUAL_CONFIG.COLOR_HAPTIC : POI_VISUAL_CONFIG.COLOR_DEFAULT;
 
     // 1) 포인터 원뿔 (꼭짓점이 정확히 로컬 Y = 0.00에 위치하도록 피벗 정렬)
-    const coneHeight = 0.060; // 6cm 날렵한 높이
-    const coneRadius = 0.022; // 2.2cm 컴팩트 반경
-    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 20);
+    const coneHeight = POI_VISUAL_CONFIG.CONE_HEIGHT;
+    const coneRadius = POI_VISUAL_CONFIG.CONE_RADIUS;
+    const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, POI_VISUAL_CONFIG.CONE_SEGMENTS);
     coneGeo.rotateX(Math.PI);
     coneGeo.translate(0, coneHeight / 2, 0);
 
@@ -145,20 +173,20 @@ export class POIManager {
     pin.add(cone);
 
     // 2) 원뿔 상단에 얹힌 발광 화이트 코어 구체
-    const sphereRadius = 0.016;
-    const sphereGeo = new THREE.SphereGeometry(sphereRadius, 16, 16);
+    const sphereRadius = POI_VISUAL_CONFIG.SPHERE_RADIUS;
+    const sphereGeo = new THREE.SphereGeometry(sphereRadius, POI_VISUAL_CONFIG.SPHERE_SEGMENTS, POI_VISUAL_CONFIG.SPHERE_SEGMENTS);
     const sphereMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
+      color: POI_VISUAL_CONFIG.COLOR_CORE,
       depthTest: false,
       depthWrite: false
     });
     const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-    sphere.position.y = coneHeight + sphereRadius * 0.7;
+    sphere.position.y = coneHeight + sphereRadius * POI_VISUAL_CONFIG.SPHERE_Y_OFFSET_FACTOR;
     sphere.name = 'sphere';
     pin.add(sphere);
 
     // 3) 수평 펄스 링 (원뿔 중간 높이에 배치하여 표면 간섭 방지)
-    const ringGeo = new THREE.RingGeometry(0.022, 0.040, 24);
+    const ringGeo = new THREE.RingGeometry(POI_VISUAL_CONFIG.RING_INNER, POI_VISUAL_CONFIG.RING_OUTER, POI_VISUAL_CONFIG.RING_SEGMENTS);
     const ringMat = new THREE.MeshBasicMaterial({
       color: typeColor,
       side: THREE.DoubleSide,
@@ -169,12 +197,12 @@ export class POIManager {
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.025;
+    ring.position.y = POI_VISUAL_CONFIG.RING_Y_OFFSET;
     ring.name = 'ring';
     pin.add(ring);
 
-    // 4) 충돌 판정용 넉넉한 판정 구체 (피킹용 - 16cm 반경으로 조준 용이성 극대화)
-    const hitGeo = new THREE.SphereGeometry(0.16, 8, 8);
+    // 4) 충돌 판정용 넉넉한 판정 구체 (피킹용)
+    const hitGeo = new THREE.SphereGeometry(POI_VISUAL_CONFIG.HITBOX_RADIUS, POI_VISUAL_CONFIG.HITBOX_SEGMENTS, POI_VISUAL_CONFIG.HITBOX_SEGMENTS);
     const hitMat = new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0,
@@ -186,10 +214,10 @@ export class POIManager {
     pin.add(hitBox);
 
     // 렌더링 우선순위 부여 (3DGS 스플랫 위에 항시 선명하게 표시)
-    pin.renderOrder = 200;
-    cone.renderOrder = 201;
-    sphere.renderOrder = 202;
-    ring.renderOrder = 200;
+    pin.renderOrder = POI_VISUAL_CONFIG.RENDER_ORDER_PIN;
+    cone.renderOrder = POI_VISUAL_CONFIG.RENDER_ORDER_CONE;
+    sphere.renderOrder = POI_VISUAL_CONFIG.RENDER_ORDER_SPHERE;
+    ring.renderOrder = POI_VISUAL_CONFIG.RENDER_ORDER_PIN;
 
     this.poiGroup.add(pin);
     this.pins.push(pin);
@@ -254,10 +282,10 @@ export class POIManager {
     this.selectedPin = pin;
     this.updateVRCardTexture(pin.userData);
 
-    // VR 카드를 핀 상단 0.22m 위치에 배치 (재사용 벡터로 할당 차단)
+    // VR 카드를 핀 상단 위치에 배치 (재사용 벡터로 할당 차단)
     pin.getWorldPosition(this._tempPinPos);
     this.vrCardMesh.position.copy(this._tempPinPos);
-    this.vrCardMesh.position.y += 0.22;
+    this.vrCardMesh.position.y += POI_VISUAL_CONFIG.CARD_Y_OFFSET;
     this.vrCardMesh.visible = true;
 
     this.onPOISelect(pin.userData);

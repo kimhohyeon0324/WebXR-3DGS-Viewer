@@ -22,6 +22,22 @@ describe('ObjectTransformController - 3D 수학 및 물리 엔진 단위 테스�
       expect(controller.pivotOffset.y).toBeCloseTo(1.15);
     });
 
+    it('인자 없이 생성 시 DEFAULT_TRANSFORM_CONFIG의 피벗(0, 1.15, 0)과 기본 감도가 적용되어야 한다', () => {
+      const defaultCtrl = new ObjectTransformController();
+      expect(defaultCtrl.pivotOffset.y).toBeCloseTo(1.15);
+      expect(defaultCtrl.config.ROTATION_POS_SENSITIVITY).toBe(4.0);
+      expect(defaultCtrl.config.PAN_SENSITIVITY).toBe(3.5);
+    });
+
+    it('사용자 정의 config 주입 시 기본 상수를 오버라이드해야 한다', () => {
+      const customCtrl = new ObjectTransformController({
+        config: { ROTATION_POS_SENSITIVITY: 8.0, PAN_SENSITIVITY: 5.0 }
+      });
+      expect(customCtrl.config.ROTATION_POS_SENSITIVITY).toBe(8.0);
+      expect(customCtrl.config.PAN_SENSITIVITY).toBe(5.0);
+      expect(customCtrl.config.ROTATION_WRIST_SENSITIVITY).toBe(1.8); // 미지정 속성은 기본값 유지
+    });
+
     it('피벗 오프셋 갱신 시 값이 안전하게 복사되어야 한다', () => {
       controller.setPivotOffset(new THREE.Vector3(0.5, 2.0, -0.5));
       expect(controller.pivotOffset.x).toBe(0.5);
