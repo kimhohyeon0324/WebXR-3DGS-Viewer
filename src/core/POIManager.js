@@ -1,14 +1,17 @@
 import * as THREE from 'three';
+import { SpatialCardCanvas } from './poi/SpatialCardCanvas.js';
+import { POI_PRESETS } from '../data/poiPresets.js';
 
 /**
  * 3D POI(Point of Interest) 메타데이터 핀 관리자
- * 3DGS 씬 내부의 시공간 메타데이터 핀 배치, 애니메이션, 레이캐스팅 피킹
+ * 3DGS 씬 내부의 시공간 메타데이터 핀 배치, 애니메이션, 레이캐스팅 피킹, WebGL 메모리 관리
  */
 export class POIManager {
   /**
    * @param {Object} options
    * @param {THREE.Scene} options.scene - 가상 Three.js 씬
    * @param {THREE.PerspectiveCamera} options.camera - 카메라
+   * @param {THREE.WebGLRenderer} [options.renderer] - 렌더러
    * @param {Function} [options.onPOISelect] - 핀 선택 콜백
    */
   constructor(options = {}) {
@@ -22,9 +25,20 @@ export class POIManager {
     this.scene.add(this.poiGroup);
 
     this.pins = [];
+    this.hitBoxes = []; // 핫 루프 내 중첩 탐색 제거용 히트박스 캐시
     this.selectedPin = null;
 
     this.raycaster = new THREE.Raycaster();
+
+    // 핫 루프(Hot Loop) 무할당(Zero-allocation) 전용 스크래치 객체
+    this._tempCamPos = new THREE.Vector3();
+    this._tempPinPos = new THREE.Vector3();
+    this._tempPointer = new THREE.Vector2();
+    this._raycastIntersects = []; // raycaster.intersectObjects 재사용 결과 버퍼
+
+    // 2D 캔버스 텍스처 팩토리 위임 인스턴스
+    this.cardCanvasRenderer = new SpatialCardCanvas(512, 256);
+    this.cardTexture = this.cardCanvasRenderer.getTexture();
 
     // VR 공간 전용 3D 플로팅 정보 카드 메쉬
     this.vrCardMesh = this.createVRCardMesh();
@@ -34,19 +48,20 @@ export class POIManager {
   }
 
   /**
+   * 외부(XRInteractionManager 등)에서 POI 그룹 전체의 월드 트랜스폼을 일괄 갱신하는 캡슐화 인터페이스
+   */
+  setTransform(position, quaternion, scale) {
+    if (this.poiGroup) {
+      if (position) this.poiGroup.position.copy(position);
+      if (quaternion) this.poiGroup.quaternion.copy(quaternion);
+      if (typeof scale === 'number' && Number.isFinite(scale)) this.poiGroup.scale.setScalar(scale);
+    }
+  }
+
+  /**
    * VR 세션 내에 텍스트와 메타데이터를 표시할 3D Canvas 텍스처 패널 생성
    */
   createVRCardMesh() {
-    this.cardCanvas = document.createElement('canvas');
-    this.cardCanvas.width = 512;
-    this.cardCanvas.height = 256;
-    this.cardCtx = this.cardCanvas.getContext('2d');
-
-    this.cardTexture = new THREE.CanvasTexture(this.cardCanvas);
-    this.cardTexture.minFilter = THREE.LinearFilter;
-    this.cardTexture.magFilter = THREE.LinearFilter;
-
-    // 가로 0.42m, 세로 0.21m의 컴팩트한 평면
     const geometry = new THREE.PlaneGeometry(0.42, 0.21);
     const material = new THREE.MeshBasicMaterial({
       map: this.cardTexture,
@@ -64,104 +79,12 @@ export class POIManager {
   }
 
   /**
-   * 2D Canvas에 POI 메타데이터 렌더링 후 텍스처 갱신
+   * 2D Canvas에 POI 메타데이터 렌더링 후 텍스처 갱신 (SpatialCardCanvas에 위임)
    */
   updateVRCardTexture(poiData) {
-    if (!this.cardCtx) return;
-    const ctx = this.cardCtx;
-    const w = 512;
-    const h = 256;
-
-    ctx.clearRect(0, 0, w, h);
-
-    // 1. 반투명 글래스모피즘 배경
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
-    this._roundRect(ctx, 4, 4, w - 8, h - 8, 20);
-    ctx.fill();
-
-    // 2. 테두리 네온 라인
-    const isHaptic = poiData.type === 'haptic';
-    ctx.strokeStyle = isHaptic ? 'rgba(245, 158, 11, 0.9)' : 'rgba(0, 240, 255, 0.9)';
-    ctx.lineWidth = 4;
-    this._roundRect(ctx, 4, 4, w - 8, h - 8, 20);
-    ctx.stroke();
-
-    // 3. 타입 뱃지
-    const badgeColor = isHaptic ? '#f59e0b' : '#00f0ff';
-    ctx.fillStyle = badgeColor;
-    this._roundRect(ctx, 24, 22, isHaptic ? 90 : 80, 28, 6);
-    ctx.fill();
-
-    ctx.fillStyle = '#0a0e17';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText((poiData.type || 'POI').toUpperCase(), isHaptic ? 69 : 64, 36);
-
-    // 4. 타이틀
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(poiData.title || 'POI Metadata', 120, 36);
-
-    // 5. 구분선
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(24, 62);
-    ctx.lineTo(w - 24, 62);
-    ctx.stroke();
-
-    // 6. 3D 좌표 정보
-    const coordStr = poiData.coordinates
-      ? `(${poiData.coordinates.x.toFixed(3)}, ${poiData.coordinates.y.toFixed(3)}, ${poiData.coordinates.z.toFixed(3)})`
-      : 'N/A';
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '14px monospace';
-    ctx.fillText(`3D POS: ${coordStr}`, 24, 84);
-
-    // 7. 설명문 본문 (자동 줄바꿈)
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '16px sans-serif';
-    this._wrapText(ctx, poiData.description || '', 24, 116, w - 48, 24);
-
-    this.cardTexture.needsUpdate = true;
-  }
-
-  _roundRect(ctx, x, y, width, height, radius) {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-  }
-
-  _wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-    let line = '';
-    let currentY = y;
-    for (let i = 0; i < text.length; i++) {
-      const testLine = line + text[i];
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && i > 0) {
-        ctx.fillText(line, x, currentY);
-        line = text[i];
-        currentY += lineHeight;
-        if (currentY > 230) {
-          ctx.fillText(line + '...', x, currentY);
-          return;
-        }
-      } else {
-        line = testLine;
-      }
+    if (this.cardCanvasRenderer) {
+      this.cardCanvasRenderer.renderCard(poiData);
     }
-    ctx.fillText(line, x, currentY);
   }
 
   /**
@@ -172,46 +95,18 @@ export class POIManager {
   }
 
   /**
-   * 프리셋 모델별 전용 POI 핀 로드
+   * 프리셋 모델별 전용 POI 핀 로드 (외부 poiPresets.js 모듈에서 데이터 취득)
    */
   loadPreset(presetKey) {
     this.clearPins();
 
-    if (presetKey === 'bonsai') {
-      this.addPOI({
-        id: 'poi-bonsai-audio',
-        title: 'Bonsai 상단 벚꽃 잎 (공간 오디오)',
-        type: 'audio',
-        // 미세 교정 후 상단 벚꽃 꼭대기 표면 (0.274, 1.491, 0.114) 바로 위 4mm
-        coordinates: new THREE.Vector3(0.274, 1.495, 0.114),
-        description: '가지와 잎사귀의 미세한 바람 소리를 재현하는 3D 공간 음향(Spatial Audio) 앵커 포인트입니다. Meta Quest 3D 오디오 렌더러와 동기화됩니다.'
-      });
-
-      this.addPOI({
-        id: 'poi-bonsai-haptic',
-        title: '화분 조약돌 (햅틱 진동 피드백)',
-        type: 'haptic',
-        // 화분 전면 테두리(1.171m) 위로 띄워 시야를 확보한 직상방 앵커 (0.041, 1.185, 0.088)
-        coordinates: new THREE.Vector3(0.041, 1.185, 0.088),
-        description: '화분 표면 및 거친 나무 껍질의 질감을 표현하는 햅틱 진동 패턴(Haptic Feedback Pulse) 메타데이터가 바인딩된 지점입니다.'
-      });
-    } else if (presetKey === 'dragon') {
-      this.addPOI({
-        id: 'poi-dragon-head',
-        title: '골든 드래곤 붉은 뿔 (공간 오디오)',
-        type: 'audio',
-        // 실측 붉은 뿔 최상단 표면 (-0.116, 1.662, 0.074) 바로 위 3mm 정밀 타겟
-        coordinates: new THREE.Vector3(-0.116, 1.665, 0.074),
-        description: '황금 용의 머리와 붉은 뿔 부위에서 울려 퍼지는 중후한 용의 숨결 3D 공간 오디오 포인트입니다.'
-      });
-
-      this.addPOI({
-        id: 'poi-dragon-body',
-        title: '황금 비늘 및 가슴 (햅틱 진동 피드백)',
-        type: 'haptic',
-        // 앞발/가슴 가장 앞쪽 바깥 표면 (X: 0.390, Y: 0.776, Z: 0.439) 바로 위 정밀 타겟
-        coordinates: new THREE.Vector3(0.385, 0.780, 0.445),
-        description: '용의 거친 황금 비늘 질감과 심장 박동을 모사하는 햅틱 진동 패턴 메타데이터 앵커입니다.'
+    const presets = POI_PRESETS[presetKey];
+    if (Array.isArray(presets)) {
+      presets.forEach(data => {
+        this.addPOI({
+          ...data,
+          coordinates: new THREE.Vector3(data.coordinates.x, data.coordinates.y, data.coordinates.z)
+        });
       });
     }
   }
@@ -233,9 +128,7 @@ export class POIManager {
     const coneHeight = 0.060; // 6cm 날렵한 높이
     const coneRadius = 0.022; // 2.2cm 컴팩트 반경
     const coneGeo = new THREE.ConeGeometry(coneRadius, coneHeight, 20);
-    // 꼭짓점이 아래로 향하게 180도 회전
     coneGeo.rotateX(Math.PI);
-    // 꼭짓점이 로컬 원점 (0, 0, 0)에 닿도록 위로 평행이동
     coneGeo.translate(0, coneHeight / 2, 0);
 
     const coneMat = new THREE.MeshStandardMaterial({
@@ -276,7 +169,7 @@ export class POIManager {
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.025; // 표면에서 2.5cm 위
+    ring.position.y = 0.025;
     ring.name = 'ring';
     pin.add(ring);
 
@@ -300,12 +193,14 @@ export class POIManager {
 
     this.poiGroup.add(pin);
     this.pins.push(pin);
+    this.hitBoxes.push(hitBox); // 히트박스 캐시에 추가
 
     return pin;
   }
 
   pickWithPointer(mouseX, mouseY, camera) {
-    this.raycaster.setFromCamera(new THREE.Vector2(mouseX, mouseY), camera);
+    this._tempPointer.set(mouseX, mouseY);
+    this.raycaster.setFromCamera(this._tempPointer, camera);
     return this._checkIntersections();
   }
 
@@ -315,39 +210,30 @@ export class POIManager {
   }
 
   /**
-   * 레이저가 POI 핀을 조준하고 있는지 비파괴 검사 (Hover 감지용)
+   * 레이저가 POI 핀을 조준하고 있는지 비파괴 검사 (Hover 감지용 - 무할당 최적화)
    */
   checkRayHover(origin, direction) {
+    if (this.hitBoxes.length === 0) return null;
+
     this.raycaster.set(origin, direction);
-    const hitBoxes = [];
-    for (const pin of this.pins) {
-      for (const child of pin.children) {
-        if (child.userData?.isPOIHitBox) {
-          hitBoxes.push(child);
-        }
-      }
-    }
-    const intersects = this.raycaster.intersectObjects(hitBoxes, false);
-    if (intersects.length > 0) {
-      return intersects[0].object.userData.pinRef || null;
+    this._raycastIntersects.length = 0;
+    this.raycaster.intersectObjects(this.hitBoxes, false, this._raycastIntersects);
+
+    if (this._raycastIntersects.length > 0) {
+      return this._raycastIntersects[0].object.userData?.pinRef || null;
     }
     return null;
   }
 
   _checkIntersections() {
-    const hitBoxes = [];
-    for (const pin of this.pins) {
-      for (const child of pin.children) {
-        if (child.userData?.isPOIHitBox) {
-          hitBoxes.push(child);
-        }
-      }
-    }
+    if (this.hitBoxes.length === 0) return null;
 
-    const intersects = this.raycaster.intersectObjects(hitBoxes, false);
-    if (intersects.length > 0) {
-      const hitBox = intersects[0].object;
-      const pin = hitBox.userData.pinRef;
+    this._raycastIntersects.length = 0;
+    this.raycaster.intersectObjects(this.hitBoxes, false, this._raycastIntersects);
+
+    if (this._raycastIntersects.length > 0) {
+      const hitBox = this._raycastIntersects[0].object;
+      const pin = hitBox.userData?.pinRef;
       if (pin && pin.userData) {
         this.selectPin(pin);
         return pin.userData;
@@ -368,10 +254,9 @@ export class POIManager {
     this.selectedPin = pin;
     this.updateVRCardTexture(pin.userData);
 
-    // VR 카드를 핀 상단 0.22m 위치에 배치
-    const pinWorldPos = new THREE.Vector3();
-    pin.getWorldPosition(pinWorldPos);
-    this.vrCardMesh.position.copy(pinWorldPos);
+    // VR 카드를 핀 상단 0.22m 위치에 배치 (재사용 벡터로 할당 차단)
+    pin.getWorldPosition(this._tempPinPos);
+    this.vrCardMesh.position.copy(this._tempPinPos);
     this.vrCardMesh.position.y += 0.22;
     this.vrCardMesh.visible = true;
 
@@ -420,20 +305,18 @@ export class POIManager {
       }
     }
 
-    // VR 플로팅 카드 빌보드(항상 사용자의 시선 카메라를 정면으로 바라봄)
+    // VR 플로팅 카드 빌보드 (무할당: 재사용 벡터 활용)
     if (this.vrCardMesh && this.vrCardMesh.visible) {
       const activeCam = (this.renderer?.xr?.isPresenting) ? this.renderer.xr.getCamera() : this.camera;
       if (activeCam) {
-        const camWorldPos = new THREE.Vector3();
-        activeCam.getWorldPosition(camWorldPos);
-        this.vrCardMesh.lookAt(camWorldPos);
+        activeCam.getWorldPosition(this._tempCamPos);
+        this.vrCardMesh.lookAt(this._tempCamPos);
       }
 
       // 선택된 핀이 모델과 함께 이동할 경우 카드의 월드 위치도 동기화
       if (this.selectedPin) {
-        const pinWorldPos = new THREE.Vector3();
-        this.selectedPin.getWorldPosition(pinWorldPos);
-        this.vrCardMesh.position.copy(pinWorldPos);
+        this.selectedPin.getWorldPosition(this._tempPinPos);
+        this.vrCardMesh.position.copy(this._tempPinPos);
         this.vrCardMesh.position.y += 0.24;
       }
     }
@@ -443,15 +326,78 @@ export class POIManager {
     return this.pins.map(p => p.userData);
   }
 
+  /**
+   * Three.js 객체 및 하위 자식들의 Geometry, Material 자원을 GPU에서 재귀적으로 해제
+   */
+  _disposeObject(obj) {
+    if (!obj) return;
+
+    if (obj.children && obj.children.length > 0) {
+      for (let i = obj.children.length - 1; i >= 0; i--) {
+        this._disposeObject(obj.children[i]);
+        obj.remove(obj.children[i]);
+      }
+    }
+
+    if (obj.geometry && typeof obj.geometry.dispose === 'function') {
+      obj.geometry.dispose();
+    }
+
+    if (obj.material) {
+      if (Array.isArray(obj.material)) {
+        obj.material.forEach(m => {
+          if (m && typeof m.dispose === 'function') m.dispose();
+        });
+      } else if (typeof obj.material.dispose === 'function') {
+        obj.material.dispose();
+      }
+    }
+  }
+
+  /**
+   * 등록된 모든 POI 핀 메쉬 및 GPU 자원을 완전히 해제
+   */
   clearPins() {
     while (this.poiGroup.children.length > 0) {
       const obj = this.poiGroup.children[0];
+      this._disposeObject(obj);
       this.poiGroup.remove(obj);
     }
     this.pins = [];
+    this.hitBoxes = [];
+    this._raycastIntersects.length = 0;
     this.selectedPin = null;
     if (this.vrCardMesh) {
       this.vrCardMesh.visible = false;
     }
+  }
+
+  /**
+   * POIManager 수명 주기 종료 시 모든 WebGL VRAM 및 Canvas 자원 해제
+   */
+  dispose() {
+    this.clearPins();
+
+    if (this.vrCardMesh) {
+      this.scene.remove(this.vrCardMesh);
+      this._disposeObject(this.vrCardMesh);
+      this.vrCardMesh = null;
+    }
+
+    if (this.cardCanvasRenderer) {
+      this.cardCanvasRenderer.dispose();
+      this.cardCanvasRenderer = null;
+    }
+    this.cardTexture = null;
+
+    if (this.poiGroup) {
+      this.scene.remove(this.poiGroup);
+      this.poiGroup = null;
+    }
+
+    this.camera = null;
+    this.renderer = null;
+    this.scene = null;
+    this.onPOISelect = null;
   }
 }

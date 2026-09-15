@@ -48,23 +48,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       poiCard.hide();
       loadingIndicator.show(`'${presetKey}' 씬을 불러오는 중...`);
       try {
-        await engine.loadModel(preset.path, {
-          position: preset.position,
-          rotation: preset.rotation,
-          scale: preset.scale,
-          cameraPosition: preset.cameraPosition,
-          cameraLookAt: preset.cameraLookAt,
-          cameraUp: preset.cameraUp
-        });
-        // 모델 전환 시 전용 POI 핀으로 교체
-        const poiMgr = engine.getPOIManager();
-        if (poiMgr) {
-          poiMgr.loadPreset(presetKey);
-        }
-
-        // WebXR 인터랙션 피벗(시각적 중심) 및 시점 재배치
-        engine.setPivotOffset(preset.cameraLookAt || engine.splatManager.getModelCenter());
-        engine.recenterXR();
+        await engine.loadPreset(presetKey, preset);
       } catch (e) {
         console.error('프리셋 로드 실패:', e);
       }
@@ -101,6 +85,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     onModelToggle: () => {
       const nextKey = currentPresetKey === 'bonsai' ? 'dragon' : 'bonsai';
       selectModel(nextKey);
+    },
+    onFrameStats: (stats) => {
+      if (overlayUI) {
+        overlayUI.updateRenderFrameStats(stats);
+      }
     }
   });
 
@@ -113,13 +102,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       poiCard.hide();
       loadingIndicator.show(`로컬 파일 '${file.name}' 파싱 중...`);
       try {
-        await engine.loadModel(file);
-        const poiMgr = engine.getPOIManager();
-        if (poiMgr) {
-          poiMgr.clearPins();
-        }
-        engine.setPivotOffset(engine.splatManager.getModelCenter());
-        engine.recenterXR();
+        await engine.loadCustomFile(file);
       } catch (e) {
         console.error('로컬 파일 로드 실패:', e);
       }

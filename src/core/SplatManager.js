@@ -23,6 +23,8 @@ export class SplatManager {
     this.currentSource = null;
     this.currentSceneOptions = {};
     this.isLoading = false;
+    this.currentLoadPromise = null;
+    this.currentAbortController = null;
     this.onXRFrameCallback = null;
 
     // 현재 렌더 튜닝 파라미터 상태 (기본값)
@@ -64,17 +66,16 @@ export class SplatManager {
       logLevel: GaussianSplats3D.LogLevel.None
     });
 
-    // GaussianSplats3D WebXR stereo uniform 계산 시 xrCamera.projectionMatrix.elements[0]이 0 또는 비정상일 때 NaN/Infinity 방지 가드
+    // GaussianSplats3D WebXR stereo uniform 계산 시 유효하지 않은 투영 행렬에 대한 안전 가드 래퍼
     if (this.viewer && typeof this.viewer.adjustForWebXRStereo === 'function') {
+      const originalAdjust = this.viewer.adjustForWebXRStereo.bind(this.viewer);
       this.viewer.adjustForWebXRStereo = (renderDimensions) => {
         try {
-          if (this.viewer.camera && this.viewer.webXRActive) {
-            const xrCamera = this.viewer.renderer?.xr?.getCamera();
-            const xrCameraProj00 = xrCamera?.projectionMatrix?.elements?.[0];
-            const cameraProj00 = this.viewer.camera?.projectionMatrix?.elements?.[0];
-            if (Number.isFinite(xrCameraProj00) && xrCameraProj00 > 0.0001 && Number.isFinite(cameraProj00) && cameraProj00 > 0.0001) {
-              renderDimensions.x *= (cameraProj00 / xrCameraProj00);
-            }
+          const xrCamera = this.viewer.renderer?.xr?.getCamera();
+          const proj00 = xrCamera?.projectionMatrix?.elements?.[0];
+          // 유효한 투영 행렬 값이 준비되었을 때만 원본 계산 실행
+          if (Number.isFinite(proj00) && proj00 > 0.0001) {
+            originalAdjust(renderDimensions);
           }
         } catch (err) {
           console.warn('[SplatManager] adjustForWebXRStereo guard catch:', err);
@@ -149,21 +150,54 @@ export class SplatManager {
   }
 
   /**
-   * 씬 로드 (파일 경로 또는 File/Blob 객체)
+   * 현재 진행 중인 씬 다운로드 및 WASM 버퍼 파싱 작업을 안전하게 중단(Abort)
+   * @param {string} [reason]
+   */
+  abortCurrentLoad(reason = '사용자에 의해 씬 로드가 취소되었습니다.') {
+    if (this.currentAbortController) {
+      try {
+        this.currentAbortController.abort(reason);
+      } catch (e) {
+        console.warn('[SplatManager] currentAbortController.abort() warning:', e);
+      }
+      this.currentAbortController = null;
+    }
+
+    if (this.currentLoadPromise && typeof this.currentLoadPromise.abort === 'function') {
+      try {
+        this.currentLoadPromise.abort(reason);
+      } catch (e) {
+        console.warn('[SplatManager] currentLoadPromise.abort() warning:', e);
+      }
+      this.currentLoadPromise = null;
+    }
+
+    this.isLoading = false;
+  }
+
+  /**
+   * 씬 로드 (파일 경로 또는 File/Blob 객체) - AbortController 비동기 취소 지원
    */
   async loadScene(source, sceneOptions = {}) {
     if (this.isLoading) {
-      console.warn('SplatManager: 이미 다른 씬이 로딩 중입니다.');
-      return;
+      console.log('SplatManager: 이전 씬 로드를 중단하고 새 씬으로 전환합니다.');
+      this.abortCurrentLoad('새로운 씬 로드 요청');
+      await new Promise(resolve => setTimeout(resolve, 35));
     }
 
+    const abortController = new AbortController();
+    this.currentAbortController = abortController;
     this.isLoading = true;
     this.currentSource = source;
     this.currentSceneOptions = sceneOptions;
     this.onProgress(0, '3DGS 가우시안 씬 준비 중...');
 
     try {
-      await this.clearCurrentScene();
+      // 새 씬 로드 전 기존 씬 인덱스를 저장 (새 씬이 완전히 로드된 후에만 이전 씬을 안전하게 제거하여 블랙스크린 방지)
+      const existingSceneCount = this.viewer?.splatMesh?.scenes?.length || 0;
+      const oldSceneIndexes = existingSceneCount > 0
+        ? Array.from({ length: existingSceneCount }, (_, i) => i)
+        : [];
 
       let format = null;
       let pathOrFile = source;
@@ -183,6 +217,7 @@ export class SplatManager {
         rotation: [0, 0, 0, 1],
         scale: [1.5, 1.5, 1.5],
         onProgress: (percent, percentText, status) => {
+          if (abortController.signal.aborted) return;
           let statusLabel = '가우시안 데이터 스트리밍...';
           if (status === 1) statusLabel = '다운로드 중...';
           else if (status === 2) statusLabel = 'GPU/WASM 정렬 버퍼 구축 중...';
@@ -195,7 +230,25 @@ export class SplatManager {
         defaultOptions.format = format;
       }
 
-      await this.viewer.addSplatScene(pathOrFile, defaultOptions);
+      // 새 씬 로드 시도 (AbortablePromise 추적)
+      const loadPromise = this.viewer.addSplatScene(pathOrFile, defaultOptions);
+      this.currentLoadPromise = loadPromise;
+      await loadPromise;
+
+      // 완료 직전 취소 여부 재확인
+      if (abortController.signal.aborted) {
+        console.log('[SplatManager] 씬 로드 완료 직전 취소 감지됨');
+        return;
+      }
+
+      // 새 씬 로드가 완전히 성공했을 때만 이전 씬들을 안전하게 정리
+      if (oldSceneIndexes.length > 0) {
+        try {
+          await this.viewer.removeSplatScenes(oldSceneIndexes, false);
+        } catch (removeErr) {
+          console.warn('SplatManager: 이전 씬 정리 중 경고:', removeErr);
+        }
+      }
 
       if (this.viewer.webXRActive) {
         // WebXR VR 활성화 중 씬 전환 시 VR 렌더 루프 및 컨트롤러 인터랙션 보존
@@ -236,9 +289,25 @@ export class SplatManager {
       });
     } catch (err) {
       this.isLoading = false;
+
+      const isAborted = abortController.signal.aborted ||
+                        err.name === 'AbortError' ||
+                        err.message?.includes('aborted') ||
+                        err.message?.includes('AbortablePromise');
+
+      if (isAborted) {
+        console.log('[SplatManager] 씬 로드가 안전하게 취소되었습니다:', err.message);
+        return;
+      }
+
       console.error('SplatManager: 씬 로드 실패:', err);
       this.onProgress(100, `로딩 에러: ${err.message}`);
       throw err;
+    } finally {
+      if (this.currentAbortController === abortController) {
+        this.currentAbortController = null;
+        this.currentLoadPromise = null;
+      }
     }
   }
 
@@ -365,5 +434,24 @@ export class SplatManager {
       }
     }
     return new THREE.Vector3(0, 1.0, 0);
+  }
+
+  /**
+   * SplatManager 수명 주기 종료 및 전체 가우시안 씬 해제
+   */
+  async dispose() {
+    this.abortCurrentLoad('SplatManager 종료');
+    if (this.viewer) {
+      try {
+        if (typeof this.viewer.dispose === 'function') {
+          await this.viewer.dispose();
+        }
+      } catch (e) {
+        console.warn('[SplatManager] viewer.dispose error:', e);
+      }
+      this.viewer = null;
+    }
+    this.threeScene = null;
+    this.container = null;
   }
 }

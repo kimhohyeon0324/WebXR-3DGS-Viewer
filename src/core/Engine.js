@@ -26,6 +26,7 @@ export class Engine {
     this.onVRStateChanged = options.onVRStateChanged || (() => {});
     this.onPOISelected = options.onPOISelected || (() => {});
     this.onModelToggle = options.onModelToggle || null;
+    this.onFrameStats = options.onFrameStats || null;
 
     // Three.js 가상 공간 보조 씬 (그리드, 마커, 라이트 등)
     this.scene = new THREE.Scene();
@@ -98,6 +99,8 @@ export class Engine {
       splatManager: this.splatManager,
       onModelToggle: this.onModelToggle,
       onSessionStart: ({ session, cameraRig }) => {
+        // VR 세션 진입 시 데스크톱 RAF 중단 (백그라운드 DOM 갱신 및 CPU 낭비 방지)
+        this.stopDesktopRenderLoop();
         this.clock.start();
         this.splatManager.enterVR((time, frame) => {
           const delta = this.clock.getDelta();
@@ -116,6 +119,8 @@ export class Engine {
       },
       onSessionEnd: () => {
         this.splatManager.exitVR();
+        // VR 세션 종료 시 데스크톱 RAF 재개
+        this.startDesktopRenderLoop();
         this.onVRStateChanged(false);
       }
     });
@@ -143,12 +148,12 @@ export class Engine {
     let downX = 0;
     let downY = 0;
 
-    window.addEventListener('pointerdown', (e) => {
+    this._onPointerDown = (e) => {
       downX = e.clientX;
       downY = e.clientY;
-    });
+    };
 
-    window.addEventListener('pointerup', (e) => {
+    this._onPointerUp = (e) => {
       // 드래그 회전이 아닌 단순 클릭 판정
       const dist = Math.hypot(e.clientX - downX, e.clientY - downY);
       if (dist < 5 && this.poiManager && !this.webXRManager?.isPresenting) {
@@ -159,39 +164,55 @@ export class Engine {
           this.poiManager.pickWithPointer(normX, normY, camera);
         }
       }
-    });
+    };
+
+    window.addEventListener('pointerdown', this._onPointerDown);
+    window.addEventListener('pointerup', this._onPointerUp);
   }
 
   /**
    * 데스크톱 모드 렌더 루프 및 POI 애니메이션 틱
    */
   initRenderStatsHook() {
-    const renderedDisplay = document.getElementById('rendered-count-display');
-    const camPosDisplay = document.getElementById('camera-pos-display');
+    this.startDesktopRenderLoop();
+  }
+
+  startDesktopRenderLoop() {
+    if (this.statsFrameId !== null) return;
 
     const tick = () => {
+      // VR 세션 활성화 중에는 데스크톱 RAF 중단
+      if (this.webXRManager?.isPresenting) {
+        this.statsFrameId = null;
+        return;
+      }
+
       if (this.stats) {
         this.stats.update();
       }
-      if (this.poiManager && !this.webXRManager?.isPresenting) {
+      if (this.poiManager) {
         this.poiManager.update(this.clock.getElapsedTime());
       }
 
-      // 실시간 렌더 스플랫 수 및 카메라 위치 HUD 갱신
-      if (this.splatManager?.viewer) {
+      // 실시간 렌더 스플랫 수 및 카메라 위치 통계 콜백 발행 (DOM 직접 접근 제거)
+      if (typeof this.onFrameStats === 'function' && this.splatManager?.viewer) {
         const viewer = this.splatManager.viewer;
-        if (renderedDisplay && viewer.splatRenderCount !== undefined) {
-          renderedDisplay.textContent = viewer.splatRenderCount.toLocaleString();
-        }
-        if (camPosDisplay && viewer.camera) {
-          const p = viewer.camera.position;
-          camPosDisplay.textContent = `${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
-        }
+        this.onFrameStats({
+          splatRenderCount: viewer.splatRenderCount,
+          cameraPosition: viewer.camera ? viewer.camera.position : null
+        });
       }
 
-      requestAnimationFrame(tick);
+      this.statsFrameId = requestAnimationFrame(tick);
     };
-    requestAnimationFrame(tick);
+    this.statsFrameId = requestAnimationFrame(tick);
+  }
+
+  stopDesktopRenderLoop() {
+    if (this.statsFrameId !== null) {
+      cancelAnimationFrame(this.statsFrameId);
+      this.statsFrameId = null;
+    }
   }
 
   /**
@@ -260,6 +281,76 @@ export class Engine {
   recenterXR() {
     if (this.webXRManager?.interactionManager) {
       this.webXRManager.interactionManager.initViewPosition();
+    }
+  }
+
+  /**
+   * 프리셋 모델 및 연계 서브시스템(POI, 피벗, XR 시점) 통합 로드 (Facade 패턴)
+   */
+  async loadPreset(presetKey, presetData) {
+    if (!presetData) return;
+
+    await this.splatManager.loadScene(presetData.path, {
+      position: presetData.position,
+      rotation: presetData.rotation,
+      scale: presetData.scale,
+      cameraPosition: presetData.cameraPosition,
+      cameraLookAt: presetData.cameraLookAt,
+      cameraUp: presetData.cameraUp
+    });
+
+    if (this.poiManager) {
+      this.poiManager.loadPreset(presetKey);
+    }
+
+    const pivot = presetData.cameraLookAt || this.splatManager.getModelCenter();
+    this.setPivotOffset(pivot);
+    this.recenterXR();
+  }
+
+  /**
+   * 사용자 로컬 파일 및 연계 서브시스템 통합 로드
+   */
+  async loadCustomFile(file) {
+    if (!file) return;
+
+    await this.splatManager.loadScene(file);
+
+    if (this.poiManager) {
+      this.poiManager.clearPins();
+    }
+
+    const center = this.splatManager.getModelCenter();
+    this.setPivotOffset(center);
+    this.recenterXR();
+  }
+
+  /**
+   * 엔진 수명 주기 종료 및 전체 리소스 해제
+   */
+  dispose() {
+    this.stopDesktopRenderLoop();
+
+    if (this._onPointerDown) {
+      window.removeEventListener('pointerdown', this._onPointerDown);
+      this._onPointerDown = null;
+    }
+    if (this._onPointerUp) {
+      window.removeEventListener('pointerup', this._onPointerUp);
+      this._onPointerUp = null;
+    }
+
+    if (this.poiManager) {
+      this.poiManager.dispose();
+      this.poiManager = null;
+    }
+
+    if (this.stats) {
+      this.stats.dispose();
+    }
+
+    if (this.splatManager) {
+      this.splatManager.dispose();
     }
   }
 }

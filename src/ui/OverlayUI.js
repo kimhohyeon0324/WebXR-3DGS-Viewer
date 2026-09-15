@@ -26,6 +26,8 @@ export class OverlayUI {
     this.splatCountDisplay = document.getElementById('splat-count-display');
     this.formatDisplay = document.getElementById('format-display');
     this.vrActiveBadge = document.getElementById('vr-active-badge');
+    this.renderedCountDisplay = document.getElementById('rendered-count-display');
+    this.camPosDisplay = document.getElementById('camera-pos-display');
 
     // 튜닝 드로어 요소
     this.btnSettingsToggle = document.getElementById('btn-settings-toggle');
@@ -56,8 +58,9 @@ export class OverlayUI {
       this.fileInput.addEventListener('change', (e) => {
         const file = e.target.files?.[0];
         if (file) {
-          if (this.modelSelect) this.modelSelect.value = 'custom';
-          this.onFileLoad(file);
+          this.validateAndLoadFile(file);
+          // 동일 파일 재선택 가능하도록 input value 초기화
+          e.target.value = '';
         }
       });
     }
@@ -141,16 +144,34 @@ export class OverlayUI {
 
       const files = e.dataTransfer?.files;
       if (files && files.length > 0) {
-        const file = files[0];
-        const ext = file.name.split('.').pop().toLowerCase();
-        if (['ply', 'splat', 'ksplat'].includes(ext)) {
-          if (this.modelSelect) this.modelSelect.value = 'custom';
-          this.onFileLoad(file);
-        } else {
-          alert('지원되지 않는 파일 형식입니다. .splat, .ksplat, .ply 파일만 가능합니다.');
-        }
+        this.validateAndLoadFile(files[0]);
       }
     });
+  }
+
+  /**
+   * 사용자 로컬 파일 유효성 검사 및 안전한 로드 (100MB 크기 가드 포함)
+   */
+  validateAndLoadFile(file) {
+    if (!file) return;
+
+    // 1. 파일 확장자 검증
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['ply', 'splat', 'ksplat'].includes(ext)) {
+      alert('지원되지 않는 파일 형식입니다. .splat, .ksplat, .ply 파일만 가능합니다.');
+      return;
+    }
+
+    // 2. 100MB 사전 차단 가드 (브라우저 메모리 OOM 크래시 방지)
+    const MAX_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
+    if (file.size > MAX_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      alert(`[파일 크기 초과] 파일 용량이 너무 큽니다 (${sizeMB}MB).\n브라우저 메모리 보호 및 안정적인 렌더링을 위해 100MB 이하의 압축 파일(.ksplat 권장)만 로드할 수 있습니다.`);
+      return;
+    }
+
+    if (this.modelSelect) this.modelSelect.value = 'custom';
+    this.onFileLoad(file);
   }
 
   /**
@@ -175,6 +196,21 @@ export class OverlayUI {
       } else {
         this.vrActiveBadge.classList.add('hidden');
       }
+    }
+  }
+
+  /**
+   * 실시간 렌더링 프레임 통계 갱신 (렌더 스플랫 수 및 카메라 위치)
+   * @param {Object} stats
+   * @param {number} [stats.splatRenderCount]
+   * @param {THREE.Vector3} [stats.cameraPosition]
+   */
+  updateRenderFrameStats({ splatRenderCount, cameraPosition } = {}) {
+    if (this.renderedCountDisplay && splatRenderCount !== undefined) {
+      this.renderedCountDisplay.textContent = splatRenderCount.toLocaleString();
+    }
+    if (this.camPosDisplay && cameraPosition) {
+      this.camPosDisplay.textContent = `${cameraPosition.x.toFixed(1)}, ${cameraPosition.y.toFixed(1)}, ${cameraPosition.z.toFixed(1)}`;
     }
   }
 }

@@ -108,8 +108,17 @@ export class WebXRManager {
         this.interactionManager.activate();
       }
 
+      const session = this.renderer.xr.getSession();
+      if (session) {
+        session.addEventListener('inputsourceschange', () => {
+          if (this.interactionManager) {
+            this.interactionManager.updateInputSources(session);
+          }
+        });
+      }
+
       this.onSessionStart({
-        session: this.renderer.xr.getSession(),
+        session: session,
         cameraRig: this.cameraRig
       });
     });
