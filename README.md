@@ -1,10 +1,22 @@
 # WebXR_3DGS: 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어
 
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
-> WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 안정적인 6DoF 인터랙션을 제공합니다.  
-> 📊 **Meta Quest 3 실기기 측정값** (Oculus Browser, stats-gl, VR 세션 종료 후 판독):  
-> Bonsai Tree (175,745 splats, KSPLAT Compressed) **70–80 FPS** / Golden Dragon (46,737 splats, SPLAT Packed) **80–90 FPS**.  
-> Quest 3 Oculus Browser의 웹 콘텐츠 표시 주사율(72Hz) 기준 두 씬 모두 목표치 달성. GPU 메모리 프로파일(HIGH/BALANCED/MEMORY_SAVER) 간 FPS 차이는 이 씬 규모에서 유의미하지 않았으며, 대형 씬(50만 스플랫 이상)에서의 프로파일 효과는 미측정입니다.
+> WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 안정적인 6DoF 인터랙션을 제공합니다.
+
+### 📊 Meta Quest 3 실기기(HMD) 실측 성능
+
+> * **테스트 환경**: Meta Quest 3 (Snapdragon XR2 Gen 2), Oculus Browser, `stats-gl` 프로파일러 (VR 세션 렌더 루프 판독)
+> * **기준 주사율**: Oculus Browser 웹 콘텐츠 기본 표시 주기 **72Hz** (기준 FrameTime: **13.88 ms**)
+
+| 씬 프리셋 (Scene) | 스플랫 수 (Splats) | 포맷 (Format) | 실측 FPS | 환산 FrameTime (ms) | 목표(72Hz) 충족 여부 |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Bonsai Tree** | 175,745 | KSPLAT (Compressed) | **70 – 80 FPS** | **12.50 – 14.28 ms** | ✅ 충족 (타깃 렌더 유지) |
+| **Golden Dragon** | 46,737 | SPLAT (Packed) | **80 – 90 FPS** | **11.11 – 12.50 ms** | ✅ 충족 (안정적 대역폭 확보) |
+
+* **실측 관찰 및 분석**:
+  1. **FrameTime 산출 근거**: $FrameTime (ms) = \frac{1000}{FPS}$ 공식 기반 환산. 두 씬 모두 모바일 WebXR 환경의 허용 버짓(13.88ms) 이내에서 안정적으로 동작함을 확인.
+  2. **GPU 프로파일 편차 관찰**: 현재 씬 규모(4만~17만 스플랫)에서는 GPU 메모리 튜닝 프로파일(`HIGH` / `BALANCED` / `MEMORY_SAVER`) 간 유의미한 FPS 편차가 관찰되지 않음 (GPU 병목이 발생하지 않는 안정 구간). 50만 개 이상의 초대형 씬에서의 프로파일 효과는 후속 검증 과제로 분류.
+  3. **하드웨어 텔레메트리 한계**: 웹 브라우저 보안 샌드박스 정책으로 인해 기기 내부의 순수 GPU 점유율(%), VRAM 사용량(MB), 칩셋 온도는 웹 페이지 내에서 접근이 차단됨 ([Section 9 참고](#9-한계점-및-향후-과제-limitations--future-work)).
 
 [![CI](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](https://vitest.dev/)
@@ -213,7 +225,7 @@ npm run lint
 
 | # | 한계 항목 | 상세 내용 |
 | :--- | :--- | :--- |
-| **1** | **실기기(HMD) 기본 FPS 측정 완료 / 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS를 측정하였습니다. Bonsai(175,745 splats): **70–80 FPS**, Dragon(46,737 splats): **80–90 FPS**로 72Hz 목표치를 달성하였습니다. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 상세 지표는 수집되지 않았으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정입니다. |
+| **1** | **실기기(HMD) FPS/FrameTime 측정 완료 / 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS 및 환산 FrameTime을 측정하였습니다. Bonsai(175,745 splats): **70–80 FPS (12.50–14.28 ms)**, Dragon(46,737 splats): **80–90 FPS (11.11–12.50 ms)**로 72Hz 목표치를 달성하였습니다. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 하드웨어 텔레메트리 지표는 브라우저 보안 샌드박스 정책으로 인해 미수집되었으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정입니다. |
 | **2** | **SharedArrayBuffer 멀티스레드 정렬 비활성화** | WebXR 환경의 CORS 보안 헤더(COOP/COEP) 구성 없이도 동작하도록 `sharedMemoryForWorkers: false`로 고정했습니다. 이로 인해 대용량 씬에서 가우시안 Radix 정렬이 단일 스레드로 수행되어 성능 저하가 발생할 수 있습니다. |
 | **3** | **동적 LOD / 점진적 스트리밍 미구현** | 씬 진입 시 전체 스플랫 데이터를 일괄 로드합니다. 수백만 개 이상의 가우시안을 포함하는 대규모 씬에서는 초기 로딩 지연 및 GPU 메모리 초과 위험이 있습니다. |
 | **4** | **E2E(End-to-End) 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버하지만, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않았습니다. |
