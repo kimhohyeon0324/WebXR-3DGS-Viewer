@@ -230,7 +230,6 @@ npm run lint
 | **3** | **동적 LOD / 점진적 스트리밍 미구현** | 씬 진입 시 전체 스플랫 데이터를 일괄 로드합니다. 수백만 개 이상의 가우시안을 포함하는 대규모 씬에서는 초기 로딩 지연 및 GPU 메모리 초과 위험이 있습니다. |
 | **4** | **E2E(End-to-End) 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버하지만, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않았습니다. |
 | **5** | **CD(지속적 배포) 미연동** | GitHub Actions CI는 자동화되어 있으나, Vercel / GitHub Pages 등 외부 서버로의 자동 배포 파이프라인은 구성되지 않았습니다. 외부 공유용 상시 데모 URL이 없어 직접 실행 환경이 필요합니다. |
-| **6** | **햅틱·오디오 메타데이터 연동 없음** | 병행 개발 중인 [XR_MetaData](https://github.com/kimhohyeon0324/XR_MetaData) 저작 도구와 아직 연결되지 않았습니다. 3DGS 씬 내 POI에 멀티모달 메타데이터를 직접 저작하는 통합 환경이 구현되어 있지 않습니다. |
 
 ---
 
@@ -245,17 +244,13 @@ npm run lint
 2. **SharedArrayBuffer 활성화 환경 구성**
    - 서버 측 COOP(`Cross-Origin-Opener-Policy`) / COEP(`Cross-Origin-Embedder-Policy`) 헤더 설정으로 멀티스레드 Radix 정렬 복원
 
-3. **XR_MetaData 통합 (멀티모달 3DGS 뷰어)**
-   - 3DGS 씬 내 POI에 햅틱·오디오 메타데이터를 직접 저작하는 통합 시스템 구현
-   - 현재 각각 독립된 두 프로젝트를 단일 WebXR 환경으로 결합
-
-4. **동적 LOD / Octree 기반 점군 스트리밍**
+3. **동적 LOD / Octree 기반 점군 스트리밍**
    - 대규모 씬 대응: 뷰포트 거리에 따라 스플랫 해상도를 동적으로 조절하는 LOD 파이프라인
 
-5. **Playwright 기반 WebXR E2E 테스트**
+4. **Playwright 기반 WebXR E2E 테스트**
    - 브라우저 헤드리스 환경에서 VR 세션 진입·컨트롤러 이벤트 시뮬레이션 자동화
 
-6. **CD 자동 배포 연동**
+5. **CD 자동 배포 연동**
    - GitHub Actions CD 워크플로우 추가 → Vercel / GitHub Pages 상시 데모 URL 제공
 
 ---
