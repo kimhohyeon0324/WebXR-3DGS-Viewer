@@ -159,7 +159,7 @@ npm install
 ```bash
 npm run dev
 ```
-> `npm run dev` 실행 시 Vite HTTPS 개발 서버(포트 5173)가 구동되며, 현재 PC의 실제 네트워크 IP가 콘솔에 자동 출력됩니다.
+> `npm run dev` 실행 시 Vite HTTPS 개발 서버(포트 5173)가 구동되며, 현재 PC의 실제 네트워크 IP가 콘솔에 자동 출력.
 
 * **PC 3D 뷰어**: `https://localhost:5173/`
 
@@ -167,7 +167,7 @@ npm run dev
 ```bash
 npm run build
 ```
-> 빌드 결과물은 `dist/` 디렉토리에 정적 파일로 생성되며, Vercel / Netlify / GitHub Pages 등에 즉시 배포할 수 있는 100% 독립형 SPA 구조입니다.
+> 빌드 결과물은 `dist/` 디렉토리에 정적 파일로 생성되며, Vercel / Netlify / GitHub Pages 등에 즉시 배포할 수 있는 100% 독립형 SPA 구조.
 
 ### 4) 품질 보증 및 CI 자동화 검증
 ```bash
@@ -180,30 +180,30 @@ npm run typecheck
 # ESLint 코드 품질 및 컨벤션 검사 (0 errors, 0 warnings)
 npm run lint
 ```
-> 본 저장소는 GitHub Actions CI와 연동되어 있으며, 모든 PR 및 `main` 브랜치 Push 시 Node.js v20/v22 환경에서 린트, 타입, 테스트, 빌드 무결성을 자동 검증합니다.
+> 본 저장소는 GitHub Actions CI와 연동되어 있으며, 모든 PR 및 `main` 브랜치 Push 시 Node.js v20/v22 환경에서 린트, 타입, 테스트, 빌드 무결성을 자동 검증.
 
 ---
 
 ## 7. Meta Quest 접속 가이드
 
 1. **동일한 로컬 네트워크(Wi-Fi) 연결**:
-   - 서버를 구동 중인 PC와 Meta Quest 헤드셋이 반드시 같은 공유기(Wi-Fi)에 연결되어 있어야 합니다.
+   - 서버를 구동 중인 PC와 Meta Quest 헤드셋이 반드시 같은 공유기(Wi-Fi)에 연결되어 있어야 함.
 2. **Quest 브라우저에서 접속**:
-   - 헤드셋을 착용하고 오큘러스 브라우저 주소창에 터미널에 출력된 IP 주소를 입력합니다:
+   - 헤드셋을 착용하고 오큘러스 브라우저 주소창에 터미널에 출력된 IP 주소를 입력:
      ```
      https://<PC_로컬_IP>:5173
      ```
 3. **자체 서명 SSL 인증서 승인 (최초 1회 필수)**:
-   - WebXR 구동을 위해서는 HTTPS 보안 컨텍스트가 필수입니다.
-   - 첫 접속 시 **"연결이 비공개로 설정되어 있지 않습니다"** 경고가 표시될 경우, 화면 하단의 **[고급(Advanced)]** 클릭 후 **[<PC_IP> (안전하지 않음)으로 이동]** 을 선택하여 승인합니다.
+   - WebXR 구동을 위해서는 HTTPS 보안 컨텍스트가 필수.
+   - 첫 접속 시 **"연결이 비공개로 설정되어 있지 않습니다"** 경고가 표시될 경우, 화면 하단의 **[고급(Advanced)]** 클릭 후 **[<PC_IP> (안전하지 않음)으로 이동]** 을 선택하여 승인.
 4. **VR 진입**:
-   - 화면 우측 상단의 **`ENTER VR`** 버튼을 클릭하여 몰입형 3DGS 6DoF 세션으로 진입합니다.
+   - 화면 우측 상단의 **`ENTER VR`** 버튼을 클릭하여 몰입형 3DGS 6DoF 세션으로 진입.
 
 ---
 
 ## 8. 외부 에셋 라이선스
 
-프로젝트에 활용된 3DGS 모델 에셋은 [Hugging Face (`aswathselvam/splats`)](https://huggingface.co/aswathselvam/splats) 저장소에서 배포된 웹 최적화 샘플을 사용하였으며, 각 씬의 원본 데이터셋 출처는 다음과 같습니다:
+프로젝트에 활용된 3DGS 모델 에셋은 [Hugging Face (`aswathselvam/splats`)](https://huggingface.co/aswathselvam/splats) 저장소에서 배포된 웹 최적화 샘플을 사용하였으며, 각 씬의 원본 데이터셋 출처는 다음과 같음:
 
 * **Bonsai Tree Scene (`.ksplat`)**:
   - **호스팅 출처**: [Hugging Face `aswathselvam/splats`](https://huggingface.co/aswathselvam/splats/blob/main/bonsai_trimmed.ksplat)
@@ -220,16 +220,16 @@ npm run lint
 
 ### 현재 한계점
 
-> 아래 항목들은 현재 시스템이 의도적으로 단순화하거나 아직 해결하지 못한 제약사항입니다.
-> 이를 솔직하게 명시하는 것이 시스템의 신뢰성을 높이는 방법이라고 판단했습니다.
+> 아래 항목들은 현재 시스템이 의도적으로 단순화하거나 아직 해결하지 못한 제약사항.
+> 이를 솔직하게 명시하는 것이 시스템의 신뢰성을 높이는 방법이라고 판단.
 
-| # | 한계 항목 | 상세 내용 |
+|  | 한계 항목 | 상세 내용 |
 | :--- | :--- | :--- |
-| **1** | **실기기 기본 성능 측정 완료 및 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS 및 환산 FrameTime을 측정하였습니다. Bonsai(175,745 splats): **70–80 FPS (12.50–14.28 ms)**, Dragon(46,737 splats): **80–90 FPS (11.11–12.50 ms)**로 72Hz 목표치를 달성하였습니다. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 하드웨어 텔레메트리 지표는 브라우저 보안 샌드박스 정책으로 인해 미수집되었으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정입니다. |
-| **2** | **SharedArrayBuffer 멀티스레드 정렬 비활성화** | WebXR 환경의 CORS 보안 헤더(COOP/COEP) 구성 없이도 동작하도록 `sharedMemoryForWorkers: false`로 고정했습니다. 이로 인해 대용량 씬에서 가우시안 Radix 정렬이 단일 스레드로 수행되어 성능 저하가 발생할 수 있습니다. |
-| **3** | **동적 LOD / 점진적 스트리밍 미구현** | 씬 진입 시 전체 스플랫 데이터를 일괄 로드합니다. 수백만 개 이상의 가우시안을 포함하는 대규모 씬에서는 초기 로딩 지연 및 GPU 메모리 초과 위험이 있습니다. |
-| **4** | **E2E 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버하지만, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않았습니다. |
-| **5** | **CD 자동 배포 미연동** | GitHub Actions CI는 자동화되어 있으나, Vercel / GitHub Pages 등 외부 서버로의 자동 배포 파이프라인은 구성되지 않았습니다. 외부 공유용 상시 데모 URL이 없어 직접 실행 환경이 필요합니다. |
+| **1** | **실기기 기본 성능 측정 완료 및 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS 및 환산 FrameTime을 측정. Bonsai(175,745 splats): **70–80 FPS (12.50–14.28 ms)**, Dragon(46,737 splats): **80–90 FPS (11.11–12.50 ms)** 로 72Hz 목표치를 달성. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 하드웨어 텔레메트리 지표는 브라우저 보안 샌드박스 정책으로 인해 미수집되었으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정. |
+| **2** | **SharedArrayBuffer 멀티스레드 정렬 비활성화** | WebXR 환경의 CORS 보안 헤더(COOP/COEP) 구성 없이도 동작하도록 `sharedMemoryForWorkers: false`로 고정. 이로 인해 대용량 씬에서 가우시안 Radix 정렬이 단일 스레드로 수행되어 성능 저하가 발생할 수 있음. |
+| **3** | **동적 LOD / 점진적 스트리밍 미구현** | 씬 진입 시 전체 스플랫 데이터를 일괄 로드. 수백만 개 이상의 가우시안을 포함하는 대규모 씬에서는 초기 로딩 지연 및 GPU 메모리 초과 위험이 있음. |
+| **4** | **E2E 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않음. |
+| **5** | **CD 자동 배포 미연동** | GitHub Actions CI는 자동화되어 있으나, Vercel / GitHub Pages 등 외부 서버로의 자동 배포 파이프라인은 구성되지 않음. 외부 공유용 상시 데모 URL이 없어 직접 실행 환경이 필요. |
 
 ---
 
