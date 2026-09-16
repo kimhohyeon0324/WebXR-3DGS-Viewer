@@ -3,6 +3,10 @@
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 60~90 FPS의 안정적인 공간 탐색과 6DoF 인터랙션을 제공합니다.
 
+[![CI](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](https://vitest.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-checkJs-blue.svg)](https://www.typescriptlang.org/)
+[![ESLint](https://img.shields.io/badge/ESLint-clean-4B32C3.svg)](https://eslint.org/)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-r160-black.svg)](https://threejs.org/)
 [![WebXR](https://img.shields.io/badge/WebXR-Meta%20Quest%202%2F3%2FPro-blue.svg)](https://immersiveweb.dev/)
@@ -149,6 +153,19 @@ npm run dev
 npm run build
 ```
 > 빌드 결과물은 `dist/` 디렉토리에 정적 파일로 생성되며, Vercel / Netlify / GitHub Pages 등에 즉시 배포할 수 있는 100% 독립형 SPA 구조입니다.
+
+### 4) 품질 보증 및 CI 자동화 검증
+```bash
+# Vitest 단위 테스트 일괄 실행 (7개 스위트, 55개 테스트)
+npm test
+
+# TypeScript checkJs 정적 타입 검증 (0 errors)
+npm run typecheck
+
+# ESLint 코드 품질 및 컨벤션 검사 (0 errors, 0 warnings)
+npm run lint
+```
+> 본 저장소는 GitHub Actions CI와 연동되어 있으며, 모든 PR 및 `main` 브랜치 Push 시 Node.js v20/v22 환경에서 린트, 타입, 테스트, 빌드 무결성을 자동 검증합니다.
 
 ---
 
