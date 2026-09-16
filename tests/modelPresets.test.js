@@ -8,7 +8,7 @@ describe('modelPresets - 프리셋 모델 및 원형 순환 스위처 단위 테
   });
 
   it('등록된 모든 프리셋이 필수 속성(name, path, position, rotation, scale, cameraPosition, cameraLookAt)을 갖추어야 한다', () => {
-    for (const [key, preset] of Object.entries(PRESET_MODELS)) {
+    for (const [_key, preset] of Object.entries(PRESET_MODELS)) {
       expect(preset.name).toBeTruthy();
       expect(preset.path).toBeTruthy();
       expect(preset.position).toHaveLength(3);

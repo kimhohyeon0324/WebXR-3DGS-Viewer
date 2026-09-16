@@ -89,6 +89,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     onResetView: () => {
       engine.resetView();
     },
+    onGpuProfileChange: async (profileKey) => {
+      loadingIndicator.show(`GPU 메모리 프로필(${profileKey}) 적용하여 씬 재구성 중...`);
+      try {
+        await engine.setGpuMemoryProfile(profileKey);
+      } catch (e) {
+        console.error('GPU 메모리 프로필 전환 실패:', e);
+      } finally {
+        loadingIndicator.hide();
+      }
+    },
     onSplatScaleChange: (scale) => {
       engine.setSplatScale(scale);
     },

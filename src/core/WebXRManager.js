@@ -8,12 +8,14 @@ import { XRInteractionManager } from './XRInteractionManager.js';
  */
 export class WebXRManager {
   /**
-   * @param {Object} options
-   * @param {THREE.WebGLRenderer} options.renderer - WebGL 렌더러
-   * @param {THREE.PerspectiveCamera} options.camera - 카메라
-   * @param {THREE.Scene} options.scene - 가상 Three.js 씬
+   * @param {Object} [options]
+   * @param {THREE.WebGLRenderer} [options.renderer] - Three.js WebGL 렌더러
+   * @param {THREE.PerspectiveCamera} [options.camera] - Three.js 메인 카메라
+   * @param {THREE.Scene} [options.scene] - Three.js 씬
    * @param {HTMLElement} [options.buttonContainer] - VR 버튼이 삽입될 DOM 컨테이너
    * @param {Object} [options.poiManager] - 3D POI 관리자 참조
+   * @param {Object} [options.splatManager] - 3DGS 스플랫 관리자 참조
+   * @param {Function} [options.onModelToggle] - 모델 토글 콜백
    * @param {Function} [options.onSessionStart] - VR 세션 시작 콜백
    * @param {Function} [options.onSessionEnd] - VR 세션 종료 콜백
    */
@@ -96,7 +98,7 @@ export class WebXRManager {
     });
 
     // 세션 생명주기 이벤트
-    this.renderer.xr.addEventListener('sessionstart', (event) => {
+    this.renderer.xr.addEventListener('sessionstart', (_event) => {
       this.isPresenting = true;
       console.log('WebXRManager: VR Session Started!');
       
@@ -123,7 +125,7 @@ export class WebXRManager {
       });
     });
 
-    this.renderer.xr.addEventListener('sessionend', (event) => {
+    this.renderer.xr.addEventListener('sessionend', (_event) => {
       this.isPresenting = false;
       console.log('WebXRManager: VR Session Ended.');
 

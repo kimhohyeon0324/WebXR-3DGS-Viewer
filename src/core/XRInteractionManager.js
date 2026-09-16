@@ -15,12 +15,12 @@ import { ObjectTransformController } from './xr/ObjectTransformController.js';
  */
 export class XRInteractionManager {
   /**
-   * @param {Object} options
-   * @param {THREE.WebGLRenderer} options.renderer
-   * @param {THREE.PerspectiveCamera} options.camera
-   * @param {THREE.Group} options.cameraRig
-   * @param {THREE.Scene} options.scene
-   * @param {Array<THREE.XRTargetRaySpace>} options.controllers
+   * @param {Object} [options]
+   * @param {THREE.WebGLRenderer} [options.renderer]
+   * @param {THREE.PerspectiveCamera} [options.camera]
+   * @param {THREE.Group} [options.cameraRig]
+   * @param {THREE.Scene} [options.scene]
+   * @param {Array<THREE.XRTargetRaySpace>} [options.controllers]
    * @param {THREE.Object3D} [options.targetScene]
    * @param {Object} [options.poiManager]
    * @param {Object} [options.splatManager]

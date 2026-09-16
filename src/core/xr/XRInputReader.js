@@ -1,11 +1,4 @@
 /**
- * WebXR Controller Input Reader & Haptic Feedback Module
- * 
- * 역할을 분리하여 Gamepad API의 버튼/스틱 상태 및 WebXR 입력 이벤트를 무할당(Zero-allocation)으로 폴링하고,
- * 컨트롤러 진동 펄스(Haptic Actuators)를 발송하는 순수 하드웨어 입력 수신 모듈입니다.
- */
-
-/**
  * 표준 WebXR Gamepad API 버튼/축 인덱스 및 임계값 매핑 상수
  */
 export const WEBXR_GAMEPAD_MAPPINGS = {
@@ -25,7 +18,7 @@ export const WEBXR_GAMEPAD_MAPPINGS = {
 export class XRInputReader {
   /**
    * @param {Object} [options]
-   * @param {Array<THREE.XRTargetRaySpace>} [options.controllers]
+   * @param {Array<import('three').XRTargetRaySpace>} [options.controllers]
    * @param {Function} [options.onSelectStart] - 트리거 클릭 시 POI 피킹 우선 처리 콜백 ((ctrl) => boolean)
    * @param {Function} [options.onSelectEnd] - 트리거 해제 콜백
    * @param {Function} [options.onSqueezeStart] - 그립 누름 콜백
@@ -63,9 +56,9 @@ export class XRInputReader {
 
   /**
    * 컨트롤러 진동(햅틱) 펄스 발생
-   * @param {THREE.XRTargetRaySpace} controller
-   * @param {number} intensity 진동 강도 (0.0 ~ 1.0)
-   * @param {number} durationMs 진동 지속 시간 (ms)
+   * @param {import('three').XRTargetRaySpace} controller
+   * @param {number} [intensity] 진동 강도 (0.0 ~ 1.0)
+   * @param {number} [durationMs] 진동 지속 시간 (ms)
    */
   triggerHaptic(controller, intensity = WEBXR_GAMEPAD_MAPPINGS.DEFAULT_HAPTIC_INTENSITY, durationMs = WEBXR_GAMEPAD_MAPPINGS.DEFAULT_HAPTIC_DURATION) {
     const gamepad = controller?.userData?.inputSource?.gamepad;

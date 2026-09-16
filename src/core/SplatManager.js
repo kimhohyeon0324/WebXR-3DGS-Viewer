@@ -1,14 +1,17 @@
 import * as THREE from 'three';
 import * as GaussianSplats3D from '@mkkellogg/gaussian-splats-3d';
+import { getGpuProfile, DEFAULT_GPU_PROFILE_KEY } from '../data/gpuTuningProfiles.js';
 
 /**
  * 3D Gaussian Splatting 코어 렌더링 및 씬 라이프사이클 관리자
  */
 export class SplatManager {
   /**
-   * @param {Object} options
-   * @param {HTMLElement} options.container - 캔버스가 마운트될 DOM 컨테이너
+   * @param {Object} [options]
+   * @param {HTMLElement} [options.container] - 캔버스가 마운트될 DOM 컨테이너
    * @param {THREE.Scene} [options.threeScene] - 3DGS와 합성 렌더링할 Three.js 씬
+   * @param {string} [options.gpuProfileKey] - 초기 GPU 메모리 튜닝 프로필 키
+   * @param {number} [options.alphaThreshold] - 알파 컷오프 임계값
    * @param {Function} [options.onProgress] - 로딩 진행률 콜백 (percent, message)
    * @param {Function} [options.onSceneLoaded] - 씬 로드 완료 콜백 ({ splatCount, format })
    */
@@ -27,10 +30,16 @@ export class SplatManager {
     this.currentAbortController = null;
     this.onXRFrameCallback = null;
 
-    // 현재 렌더 튜닝 파라미터 상태 (기본값)
+    // GPU 메모리 튜닝 프로필 초기화 (기본: BALANCED - FP16 / 16-bit 압축 / 중간버퍼 즉시해제)
+    this.currentGpuProfileKey = options.gpuProfileKey || DEFAULT_GPU_PROFILE_KEY;
+    this.currentGpuProfile = getGpuProfile(this.currentGpuProfileKey);
+
+    // 현재 렌더 튜닝 파라미터 상태 (선택된 GPU 프로필 기본값 반영)
     this.renderSettings = {
       splatScale: 1.0,
-      alphaThreshold: 5,
+      alphaThreshold: options.alphaThreshold !== undefined
+        ? options.alphaThreshold
+        : this.currentGpuProfile.sceneOptions.splatAlphaRemovalThreshold,
       pointCloudMode: false,
       focalAdjustment: 1.0
     };
@@ -46,9 +55,13 @@ export class SplatManager {
   }
 
   /**
-   * GaussianSplats3D.Viewer 초기화
+   * GaussianSplats3D.Viewer 초기화 (현재 GPU 프로필 옵션 적용)
+   * @param {Object} [customOptions]
    */
-  initViewer() {
+  initViewer(customOptions = {}) {
+    const profile = this.currentGpuProfile;
+    const viewerOpts = { ...profile.viewerOptions, ...(customOptions.viewerOptions || {}) };
+
     this.viewer = new GaussianSplats3D.Viewer({
       rootElement: this.container,
       threeScene: this.threeScene,
@@ -59,11 +72,15 @@ export class SplatManager {
       selfDrivenMode: true,
       gpuAcceleratedSort: false, // 호환성 극대화 (브라우저 GPU 차이 방지)
       sharedMemoryForWorkers: false, // SharedArrayBuffer CORS/보안 이슈 원천 차단
-      integerBasedSort: true,
       dynamicScene: false, // 로드 시점에 트랜스폼 베이킹(안정성 극대화)
-      halfPrecisionCovariancesOnGPU: false,
       sceneRevealMode: GaussianSplats3D.SceneRevealMode.Instant,
-      logLevel: GaussianSplats3D.LogLevel.None
+      logLevel: GaussianSplats3D.LogLevel.None,
+      // 대용량 씬 대비 GPU 메모리 튜닝 파라미터 적용
+      halfPrecisionCovariancesOnGPU: viewerOpts.halfPrecisionCovariancesOnGPU,
+      inMemoryCompressionLevel: viewerOpts.inMemoryCompressionLevel,
+      freeIntermediateSplatData: viewerOpts.freeIntermediateSplatData,
+      integerBasedSort: viewerOpts.integerBasedSort,
+      sphericalHarmonicsDegree: viewerOpts.sphericalHarmonicsDegree
     });
 
     // GaussianSplats3D WebXR stereo uniform 계산 시 유효하지 않은 투영 행렬에 대한 안전 가드 래퍼
@@ -209,6 +226,7 @@ export class SplatManager {
         else if (ext === 'ksplat') format = GaussianSplats3D.SceneFormat.KSplat;
       }
 
+      /** @type {Record<string, any>} */
       const defaultOptions = {
         splatAlphaRemovalThreshold: this.renderSettings.alphaThreshold,
         showLoadingUI: false,
@@ -216,6 +234,7 @@ export class SplatManager {
         position: [0, 1, 0],
         rotation: [0, 0, 0, 1],
         scale: [1.5, 1.5, 1.5],
+        format: null,
         onProgress: (percent, percentText, status) => {
           if (abortController.signal.aborted) return;
           let statusLabel = '가우시안 데이터 스트리밍...';
@@ -437,20 +456,101 @@ export class SplatManager {
   }
 
   /**
+   * 기존 GaussianSplats3D Viewer 리소스 및 렌더러 안전 해제
+   */
+  destroyViewer() {
+    if (!this.viewer) return;
+
+    try {
+      if (this.viewer.requestFrameId) {
+        cancelAnimationFrame(this.viewer.requestFrameId);
+        this.viewer.requestFrameId = null;
+      }
+      if (typeof this.viewer.stop === 'function') {
+        this.viewer.stop();
+      }
+      if (typeof this.viewer.removeEventHandlers === 'function') {
+        this.viewer.removeEventHandlers();
+      }
+      if (this.viewer.splatMesh && typeof this.viewer.splatMesh.dispose === 'function') {
+        this.viewer.splatMesh.dispose();
+      }
+      if (this.viewer.renderer) {
+        if (typeof this.viewer.renderer.setAnimationLoop === 'function') {
+          this.viewer.renderer.setAnimationLoop(null);
+        }
+        if (this.viewer.renderer.domElement && this.viewer.renderer.domElement.parentNode) {
+          this.viewer.renderer.domElement.parentNode.removeChild(this.viewer.renderer.domElement);
+        }
+        if (typeof this.viewer.renderer.dispose === 'function') {
+          this.viewer.renderer.dispose();
+        }
+      }
+      if (typeof this.viewer.dispose === 'function') {
+        this.viewer.dispose();
+      }
+    } catch (err) {
+      console.warn('[SplatManager] destroyViewer warning:', err);
+    }
+    this.viewer = null;
+  }
+
+  /**
+   * 새 GPU 메모리 프로필을 적용하여 Viewer를 안전하게 재구축하고 활성 씬 복원
+   * @param {string} profileKey
+   */
+  async applyGpuProfile(profileKey) {
+    const newProfile = getGpuProfile(profileKey);
+    if (!newProfile) return;
+
+    this.currentGpuProfileKey = newProfile.key;
+    this.currentGpuProfile = newProfile;
+    this.renderSettings.alphaThreshold = newProfile.sceneOptions.splatAlphaRemovalThreshold;
+
+    const sourceToReload = this.currentSource;
+    /** @type {Record<string, any>} */
+    const sceneOptionsToReload = { ...this.currentSceneOptions };
+    const savedCamPos = this.viewer?.camera?.position ? this.viewer.camera.position.toArray() : null;
+    const savedCamLookAt = this.currentSceneOptions?.cameraLookAt || null;
+    const savedCamUp = this.viewer?.camera?.up ? this.viewer.camera.up.toArray() : null;
+
+    this.abortCurrentLoad('GPU 프로필 변경으로 인한 씬 재구축');
+
+    this.destroyViewer();
+    this.initViewer();
+
+    if (sourceToReload) {
+      if (savedCamPos && savedCamLookAt) {
+        sceneOptionsToReload.cameraPosition = savedCamPos;
+        sceneOptionsToReload.cameraLookAt = savedCamLookAt;
+        if (savedCamUp) sceneOptionsToReload.cameraUp = savedCamUp;
+      }
+      await this.loadScene(sourceToReload, sceneOptionsToReload);
+    }
+  }
+
+  /**
+   * 현재 활성 GPU 메모리 튜닝 프로필 객체 반환
+   * @returns {Object}
+   */
+  getCurrentGpuProfile() {
+    return this.currentGpuProfile;
+  }
+
+  /**
+   * 현재 활성 GPU 메모리 튜닝 프로필 키 반환
+   * @returns {string}
+   */
+  getCurrentGpuProfileKey() {
+    return this.currentGpuProfileKey;
+  }
+
+  /**
    * SplatManager 수명 주기 종료 및 전체 가우시안 씬 해제
    */
   async dispose() {
     this.abortCurrentLoad('SplatManager 종료');
-    if (this.viewer) {
-      try {
-        if (typeof this.viewer.dispose === 'function') {
-          await this.viewer.dispose();
-        }
-      } catch (e) {
-        console.warn('[SplatManager] viewer.dispose error:', e);
-      }
-      this.viewer = null;
-    }
+    this.destroyViewer();
     this.threeScene = null;
     this.container = null;
   }

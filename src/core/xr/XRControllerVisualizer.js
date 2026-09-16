@@ -33,10 +33,11 @@ export class XRControllerVisualizer {
    * @param {number} opacity
    */
   setLaserStyle(controller, hexColor, opacity) {
-    const laser = controller?.getObjectByName('laserGuide');
+    const laser = /** @type {THREE.Line | null} */ (controller?.getObjectByName('laserGuide'));
     if (laser && laser.material) {
-      laser.material.color.setHex(hexColor);
-      laser.material.opacity = opacity;
+      const mat = /** @type {any} */ (laser.material);
+      mat.color.setHex(hexColor);
+      mat.opacity = opacity;
     }
   }
 

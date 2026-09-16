@@ -488,8 +488,9 @@ export class ObjectTransformController {
         splatMesh.position.copy(this._meshWorldPos);
         splatMesh.quaternion.copy(this.modelQuaternion);
         splatMesh.scale.setScalar(this.modelScale);
-        if (typeof splatMesh.updateTransforms === 'function') {
-          splatMesh.updateTransforms();
+        const splatMeshAny = /** @type {any} */ (splatMesh);
+        if (typeof splatMeshAny.updateTransforms === 'function') {
+          splatMeshAny.updateTransforms();
         }
       } else if (targetScene) {
         targetScene.position.copy(this._meshWorldPos);

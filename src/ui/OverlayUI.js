@@ -1,16 +1,19 @@
 import { PRESET_MODELS, DEFAULT_MODEL_KEY } from '../data/modelPresets.js';
+import { GPU_MEMORY_PROFILES, DEFAULT_GPU_PROFILE_KEY, getGpuProfile } from '../data/gpuTuningProfiles.js';
 
 /**
  * 뷰어 HUD 및 사용자 인터랙션 오버레이 관리자
  */
 export class OverlayUI {
   /**
-   * @param {Object} options
+   * @param {Object} [options]
    * @param {Object} [options.presets] - 모델 프리셋 사전 객체 (미지정 시 PRESET_MODELS 사용)
    * @param {string} [options.initialPresetKey] - 초기 선택 프리셋 키
-   * @param {Function} options.onModelSelect - 프리셋 선택 콜백 (presetKey)
-   * @param {Function} options.onFileLoad - 로컬 파일 로드 콜백 (File)
-   * @param {Function} options.onResetView - 시점 리셋 콜백
+   * @param {string} [options.initialGpuProfileKey] - 초기 GPU 메모리 튜닝 프로필 키
+   * @param {Function} [options.onModelSelect] - 프리셋 선택 콜백 (presetKey)
+   * @param {Function} [options.onFileLoad] - 로컬 파일 로드 콜백 (File)
+   * @param {Function} [options.onResetView] - 시점 리셋 콜백
+   * @param {Function} [options.onGpuProfileChange] - GPU 메모리 프로필 변경 콜백 (profileKey)
    * @param {Function} [options.onSplatScaleChange] - 스플랫 크기 변경 콜백
    * @param {Function} [options.onAlphaCutoffChange] - 알파 컷오프 변경 콜백
    * @param {Function} [options.onPointCloudToggle] - 포인트 클라우드 모드 토글
@@ -18,15 +21,17 @@ export class OverlayUI {
   constructor(options = {}) {
     this.presets = options.presets || PRESET_MODELS;
     this.initialPresetKey = options.initialPresetKey || DEFAULT_MODEL_KEY;
+    this.initialGpuProfileKey = options.initialGpuProfileKey || DEFAULT_GPU_PROFILE_KEY;
     this.onModelSelect = options.onModelSelect || (() => {});
     this.onFileLoad = options.onFileLoad || (() => {});
     this.onResetView = options.onResetView || (() => {});
+    this.onGpuProfileChange = options.onGpuProfileChange || (() => {});
     this.onSplatScaleChange = options.onSplatScaleChange || (() => {});
     this.onAlphaCutoffChange = options.onAlphaCutoffChange || (() => {});
     this.onPointCloudToggle = options.onPointCloudToggle || (() => {});
 
-    this.modelSelect = document.getElementById('model-select');
-    this.fileInput = document.getElementById('file-input');
+    this.modelSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('model-select'));
+    this.fileInput = /** @type {HTMLInputElement | null} */ (document.getElementById('file-input'));
     this.btnResetCam = document.getElementById('btn-reset-cam');
     this.dropOverlay = document.getElementById('drop-zone-overlay');
     this.splatCountDisplay = document.getElementById('splat-count-display');
@@ -39,13 +44,17 @@ export class OverlayUI {
     this.btnSettingsToggle = document.getElementById('btn-settings-toggle');
     this.btnSettingsClose = document.getElementById('btn-settings-close');
     this.settingsPanel = document.getElementById('settings-panel');
-    this.sliderSplatScale = document.getElementById('slider-splat-scale');
+    this.selectGpuProfile = /** @type {HTMLSelectElement | null} */ (document.getElementById('select-gpu-profile'));
+    this.badgeGpuProfile = document.getElementById('badge-gpu-profile');
+    this.descGpuProfile = document.getElementById('desc-gpu-profile');
+    this.sliderSplatScale = /** @type {HTMLInputElement | null} */ (document.getElementById('slider-splat-scale'));
     this.labelSplatScale = document.getElementById('label-splat-scale');
-    this.sliderAlphaCutoff = document.getElementById('slider-alpha-cutoff');
+    this.sliderAlphaCutoff = /** @type {HTMLInputElement | null} */ (document.getElementById('slider-alpha-cutoff'));
     this.labelAlphaCutoff = document.getElementById('label-alpha-cutoff');
-    this.togglePointCloud = document.getElementById('toggle-point-cloud');
+    this.togglePointCloud = /** @type {HTMLInputElement | null} */ (document.getElementById('toggle-point-cloud'));
 
     this.initModelSelectOptions();
+    this.initGpuProfileOptions();
     this.initEventListeners();
     this.initDragAndDrop();
     this.initSettingsPanel();
@@ -76,10 +85,57 @@ export class OverlayUI {
     }
   }
 
+  /**
+   * GPU 메모리 프로필 셀렉트 박스 옵션 렌더링 및 초기 상태 바인딩
+   */
+  initGpuProfileOptions() {
+    if (!this.selectGpuProfile) return;
+
+    this.selectGpuProfile.innerHTML = '';
+
+    for (const [key, profile] of Object.entries(GPU_MEMORY_PROFILES)) {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = profile.name;
+      this.selectGpuProfile.appendChild(option);
+    }
+
+    if (this.initialGpuProfileKey && GPU_MEMORY_PROFILES[this.initialGpuProfileKey]) {
+      this.selectGpuProfile.value = this.initialGpuProfileKey;
+      this.updateGpuProfileUI(this.initialGpuProfileKey);
+    }
+  }
+
+  /**
+   * GPU 메모리 프로필 변경에 따른 UI 배지, 설명 및 컷오프 슬라이더 갱신
+   * @param {string} profileKey
+   */
+  updateGpuProfileUI(profileKey) {
+    const profile = getGpuProfile(profileKey);
+    if (!profile) return;
+
+    if (this.selectGpuProfile && this.selectGpuProfile.value !== profile.key) {
+      this.selectGpuProfile.value = profile.key;
+    }
+    if (this.badgeGpuProfile) {
+      this.badgeGpuProfile.textContent = profile.badgeText;
+    }
+    if (this.descGpuProfile) {
+      this.descGpuProfile.textContent = profile.description;
+    }
+    if (this.sliderAlphaCutoff) {
+      this.sliderAlphaCutoff.value = String(profile.sceneOptions.splatAlphaRemovalThreshold);
+    }
+    if (this.labelAlphaCutoff) {
+      this.labelAlphaCutoff.textContent = `${profile.sceneOptions.splatAlphaRemovalThreshold}`;
+    }
+  }
+
   initEventListeners() {
     if (this.modelSelect) {
       this.modelSelect.addEventListener('change', (e) => {
-        const val = e.target.value;
+        const target = /** @type {HTMLSelectElement} */ (e.target);
+        const val = target.value;
         if (val !== 'custom') {
           this.onModelSelect(val);
         }
@@ -88,11 +144,12 @@ export class OverlayUI {
 
     if (this.fileInput) {
       this.fileInput.addEventListener('change', (e) => {
-        const file = e.target.files?.[0];
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        const file = target.files?.[0];
         if (file) {
           this.validateAndLoadFile(file);
           // 동일 파일 재선택 가능하도록 input value 초기화
-          e.target.value = '';
+          target.value = '';
         }
       });
     }
@@ -117,9 +174,19 @@ export class OverlayUI {
       });
     }
 
+    if (this.selectGpuProfile) {
+      this.selectGpuProfile.addEventListener('change', (e) => {
+        const target = /** @type {HTMLSelectElement} */ (e.target);
+        const val = target.value;
+        this.updateGpuProfileUI(val);
+        this.onGpuProfileChange(val);
+      });
+    }
+
     if (this.sliderSplatScale) {
       this.sliderSplatScale.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        const val = parseFloat(target.value);
         if (this.labelSplatScale) this.labelSplatScale.textContent = `${val.toFixed(2)}x`;
         this.onSplatScaleChange(val);
       });
@@ -127,7 +194,8 @@ export class OverlayUI {
 
     if (this.sliderAlphaCutoff) {
       this.sliderAlphaCutoff.addEventListener('change', (e) => {
-        const val = parseInt(e.target.value, 10);
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        const val = parseInt(target.value, 10);
         if (this.labelAlphaCutoff) this.labelAlphaCutoff.textContent = `${val}`;
         this.onAlphaCutoffChange(val);
       });
@@ -135,7 +203,8 @@ export class OverlayUI {
 
     if (this.togglePointCloud) {
       this.togglePointCloud.addEventListener('change', (e) => {
-        const checked = e.target.checked;
+        const target = /** @type {HTMLInputElement} */ (e.target);
+        const checked = target.checked;
         this.onPointCloudToggle(checked);
       });
     }
@@ -233,9 +302,9 @@ export class OverlayUI {
 
   /**
    * 실시간 렌더링 프레임 통계 갱신 (렌더 스플랫 수 및 카메라 위치)
-   * @param {Object} stats
+   * @param {Object} [stats]
    * @param {number} [stats.splatRenderCount]
-   * @param {THREE.Vector3} [stats.cameraPosition]
+   * @param {import('three').Vector3} [stats.cameraPosition]
    */
   updateRenderFrameStats({ splatRenderCount, cameraPosition } = {}) {
     if (this.renderedCountDisplay && splatRenderCount !== undefined) {

@@ -36,9 +36,9 @@ export const POI_VISUAL_CONFIG = {
  */
 export class POIManager {
   /**
-   * @param {Object} options
-   * @param {THREE.Scene} options.scene - 가상 Three.js 씬
-   * @param {THREE.PerspectiveCamera} options.camera - 카메라
+   * @param {Object} [options]
+   * @param {THREE.Scene} [options.scene] - 가상 Three.js 씬
+   * @param {THREE.PerspectiveCamera} [options.camera] - 카메라
    * @param {THREE.WebGLRenderer} [options.renderer] - 렌더러
    * @param {Function} [options.onPOISelect] - 핀 선택 콜백
    */

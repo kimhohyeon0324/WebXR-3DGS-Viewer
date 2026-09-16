@@ -21,5 +21,26 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp'
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('@mkkellogg/gaussian-splats-3d')) {
+              return 'vendor-splats';
+            }
+            if (id.includes('three')) {
+              return 'vendor-three';
+            }
+            if (id.includes('stats-gl')) {
+              return 'vendor-stats';
+            }
+            return 'vendor-libs';
+          }
+        }
+      }
+    },
+    chunkSizeWarningLimit: 600
   }
 });

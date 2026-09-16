@@ -100,6 +100,18 @@
       </div>
 
       <div class="settings-body">
+        <!-- GPU 메모리 & 대용량 최적화 프로필 -->
+        <div class="setting-row">
+          <div class="setting-label-row">
+            <label for="select-gpu-profile" class="setting-label">GPU Memory Profile (메모리 프로필)</label>
+            <span id="badge-gpu-profile" class="setting-val" style="font-size: 11px;">FP16 (VRAM ~50% 절감)</span>
+          </div>
+          <select id="select-gpu-profile" class="hud-select" style="width: 100%;">
+            <!-- gpuTuningProfiles.js 및 OverlayUI에 의해 동적 자동 렌더링 -->
+          </select>
+          <p id="desc-gpu-profile" class="setting-hint">FP16 반정밀도 공분산 텍스처로 VRAM을 50% 절감하고 중간 버퍼를 즉시 해제합니다.</p>
+        </div>
+
         <div class="setting-row">
           <div class="setting-label-row">
             <label for="slider-splat-scale" class="setting-label">Splat Scale (크기 배율)</label>

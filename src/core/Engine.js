@@ -10,13 +10,16 @@ import { POIManager } from './POIManager.js';
  */
 export class Engine {
   /**
-   * @param {Object} options
-   * @param {HTMLElement} options.container - 뷰어 DOM
+   * @param {Object} [options]
+   * @param {HTMLElement} [options.container] - 뷰어 DOM
    * @param {HTMLElement} [options.vrButtonContainer] - VR 버튼 삽입 컨테이너
-   * @param {Function} options.onProgress - 로딩 프로그레스
-   * @param {Function} options.onSceneLoaded - 씬 로드 완료 이벤트
+   * @param {string} [options.gpuProfileKey] - GPU 메모리 튜닝 프로필 키
+   * @param {Function} [options.onProgress] - 로딩 프로그레스
+   * @param {Function} [options.onSceneLoaded] - 씬 로드 완료 이벤트
    * @param {Function} [options.onVRStateChanged] - VR 세션 진입/종료 상태 콜백 (isActive)
    * @param {Function} [options.onPOISelected] - 3D 핀 선택 콜백 (poiData)
+   * @param {Function} [options.onModelToggle] - 모델 토글 콜백
+   * @param {Function} [options.onFrameStats] - 프레임 렌더 통계 콜백
    */
   constructor(options = {}) {
     this.container = options.container || document.getElementById('viewer-container');
@@ -33,10 +36,11 @@ export class Engine {
     this.clock = new THREE.Clock();
     this.setupAuxiliaryScene();
 
-    // 3DGS 스플랫 매니저 초기화
+    // 3DGS 스플랫 매니저 초기화 (GPU 메모리 프로필 주입 지원)
     this.splatManager = new SplatManager({
       container: this.container,
       threeScene: this.scene,
+      gpuProfileKey: options.gpuProfileKey,
       onProgress: (pct, msg) => this.onProgress(pct, msg),
       onSceneLoaded: (data) => {
         this.onSceneLoaded(data);
@@ -98,11 +102,11 @@ export class Engine {
       poiManager: this.poiManager,
       splatManager: this.splatManager,
       onModelToggle: this.onModelToggle,
-      onSessionStart: ({ session, cameraRig }) => {
+      onSessionStart: ({ session: _session, cameraRig: _cameraRig }) => {
         // VR 세션 진입 시 데스크톱 RAF 중단 (백그라운드 DOM 갱신 및 CPU 낭비 방지)
         this.stopDesktopRenderLoop();
         this.clock.start();
-        this.splatManager.enterVR((time, frame) => {
+        this.splatManager.enterVR((_time, _frame) => {
           const delta = this.clock.getDelta();
           try {
             if (this.webXRManager) {
@@ -228,6 +232,42 @@ export class Engine {
 
   async setAlphaThreshold(threshold) {
     await this.splatManager.setAlphaThreshold(threshold);
+  }
+
+  /**
+   * GPU 메모리 튜닝 프로필 변경 프록시
+   * @param {string} profileKey
+   */
+  async setGpuMemoryProfile(profileKey) {
+    await this.splatManager.applyGpuProfile(profileKey);
+    this.rebindViewerReferences();
+  }
+
+  /**
+   * 재구축된 Viewer의 렌더러/카메라 참조를 서브시스템(Stats, POI, WebXR)에 재바인딩
+   */
+  rebindViewerReferences() {
+    const renderer = this.splatManager.getRenderer();
+    const camera = this.splatManager.getCamera();
+    if (renderer && this.statsInitialized) {
+      this.stats.initRenderer(renderer);
+    }
+    if (this.poiManager && camera && renderer) {
+      this.poiManager.camera = camera;
+      this.poiManager.renderer = renderer;
+    }
+    if (this.webXRManager && camera && renderer) {
+      this.webXRManager.renderer = renderer;
+      this.webXRManager.camera = camera;
+    }
+  }
+
+  getCurrentGpuProfile() {
+    return this.splatManager.getCurrentGpuProfile();
+  }
+
+  getCurrentGpuProfileKey() {
+    return this.splatManager.getCurrentGpuProfileKey();
   }
 
   /**
