@@ -2,7 +2,9 @@
 
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 안정적인 6DoF 인터랙션을 제공합니다.  
-> ⚠️ **성능 수치 참고**: 데스크톱 Chrome 환경에서 60~90 FPS를 확인하였으나, Meta Quest 실기기(HMD)에서의 체계적인 FPS·GPU 메모리 실측 데이터는 아직 수집되지 않았습니다. 자세한 내용은 [한계점 및 향후 과제](#9-한계점-및-향후-과제-limitations--future-work) 섹션을 참고하세요.
+> 📊 **Meta Quest 3 실기기 측정값** (Oculus Browser, stats-gl, VR 세션 종료 후 판독):  
+> Bonsai Tree (175,745 splats, KSPLAT Compressed) **70–80 FPS** / Golden Dragon (46,737 splats, SPLAT Packed) **80–90 FPS**.  
+> Quest 3 Oculus Browser의 웹 콘텐츠 표시 주사율(72Hz) 기준 두 씬 모두 목표치 달성. GPU 메모리 프로파일(HIGH/BALANCED/MEMORY_SAVER) 간 FPS 차이는 이 씬 규모에서 유의미하지 않았으며, 대형 씬(50만 스플랫 이상)에서의 프로파일 효과는 미측정입니다.
 
 [![CI](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](https://vitest.dev/)
@@ -211,7 +213,7 @@ npm run lint
 
 | # | 한계 항목 | 상세 내용 |
 | :--- | :--- | :--- |
-| **1** | **실기기(HMD) 벤치마크 미수행** | 서두에 명시된 "60~90 FPS"는 데스크톱 Chrome 환경에서 확인한 수치입니다. Meta Quest 3 실기기에서의 체계적인 FPS, GPU 온도, 메모리 점유율 실측 데이터는 아직 수집되지 않았습니다. |
+| **1** | **실기기(HMD) 기본 FPS 측정 완료 / 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS를 측정하였습니다. Bonsai(175,745 splats): **70–80 FPS**, Dragon(46,737 splats): **80–90 FPS**로 72Hz 목표치를 달성하였습니다. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 상세 지표는 수집되지 않았으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정입니다. |
 | **2** | **SharedArrayBuffer 멀티스레드 정렬 비활성화** | WebXR 환경의 CORS 보안 헤더(COOP/COEP) 구성 없이도 동작하도록 `sharedMemoryForWorkers: false`로 고정했습니다. 이로 인해 대용량 씬에서 가우시안 Radix 정렬이 단일 스레드로 수행되어 성능 저하가 발생할 수 있습니다. |
 | **3** | **동적 LOD / 점진적 스트리밍 미구현** | 씬 진입 시 전체 스플랫 데이터를 일괄 로드합니다. 수백만 개 이상의 가우시안을 포함하는 대규모 씬에서는 초기 로딩 지연 및 GPU 메모리 초과 위험이 있습니다. |
 | **4** | **E2E(End-to-End) 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버하지만, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않았습니다. |
@@ -224,8 +226,9 @@ npm run lint
 
 우선순위 기준으로 정렬하였습니다:
 
-1. **Quest 3 실기기 FPS·GPU 실측 데이터 수집 및 문서화**
-   - 씬 규모(스플랫 수)에 따른 FPS, 프레임 타임, GPU 메모리 점유율을 계측하고 README에 반영
+1. **Quest 3 실기기 상세 성능 지표 추가 수집** _(FPS 기본 측정 완료)_
+   - 기본 FPS는 확인됨 (Bonsai 70–80, Dragon 80–90). GPU 온도, 프레임 타임 분포, CPU·GPU 사용률, 메모리 점유율 등의 상세 지표는 Meta Quest Developer Hub(MQDH) 또는 ADB를 통해 추가 수집 필요
+   - 50만 스플랫 이상 대형 씬에서의 GPU 프로파일별 효과 측정 미수행
 
 2. **SharedArrayBuffer 활성화 환경 구성**
    - 서버 측 COOP(`Cross-Origin-Opener-Policy`) / COEP(`Cross-Origin-Embedder-Policy`) 헤더 설정으로 멀티스레드 Radix 정렬 복원
