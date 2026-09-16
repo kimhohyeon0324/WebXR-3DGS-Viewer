@@ -3,20 +3,20 @@
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
 > WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 안정적인 6DoF 인터랙션을 제공합니다.
 
-### 📊 Meta Quest 3 실기기(HMD) 실측 성능
+### Meta Quest 3 실기기 실측 성능
 
-> * **테스트 환경**: Meta Quest 3 (Snapdragon XR2 Gen 2), Oculus Browser, `stats-gl` 프로파일러 (VR 세션 렌더 루프 판독)
+> * **테스트 환경**: Meta Quest 3, Oculus Browser, `stats-gl` 프로파일러 (VR 세션 렌더 루프 판독)
 > * **기준 주사율**: Oculus Browser 웹 콘텐츠 기본 표시 주기 **72Hz** (기준 FrameTime: **13.88 ms**)
 
-| 씬 프리셋 (Scene) | 스플랫 수 (Splats) | 포맷 (Format) | 실측 FPS | 환산 FrameTime (ms) | 목표(72Hz) 충족 여부 |
+| 씬 프리셋 | 스플랫 수 | 포맷 | 실측 FPS | 환산 FrameTime (ms) | 목표(72Hz) 충족 여부 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Bonsai Tree** | 175,745 | KSPLAT (Compressed) | **70 – 80 FPS** | **12.50 – 14.28 ms** | ✅ 충족 (타깃 렌더 유지) |
-| **Golden Dragon** | 46,737 | SPLAT (Packed) | **80 – 90 FPS** | **11.11 – 12.50 ms** | ✅ 충족 (안정적 대역폭 확보) |
+| **Bonsai Tree** | 175,745 | KSPLAT | **70 – 80 FPS** | **12.50 – 14.28 ms** | 충족 (타깃 렌더 유지) |
+| **Golden Dragon** | 46,737 | SPLAT | **80 – 90 FPS** | **11.11 – 12.50 ms** | 충족 (안정적 대역폭 확보) |
 
 * **실측 관찰 및 분석**:
   1. **FrameTime 산출 근거**: $FrameTime (ms) = \frac{1000}{FPS}$ 공식 기반 환산. 두 씬 모두 모바일 WebXR 환경의 허용 버짓(13.88ms) 이내에서 안정적으로 동작함을 확인.
-  2. **GPU 프로파일 편차 관찰**: 현재 씬 규모(4만~17만 스플랫)에서는 GPU 메모리 튜닝 프로파일(`HIGH` / `BALANCED` / `MEMORY_SAVER`) 간 유의미한 FPS 편차가 관찰되지 않음 (GPU 병목이 발생하지 않는 안정 구간). 50만 개 이상의 초대형 씬에서의 프로파일 효과는 후속 검증 과제로 분류.
-  3. **하드웨어 텔레메트리 한계**: 웹 브라우저 보안 샌드박스 정책으로 인해 기기 내부의 순수 GPU 점유율(%), VRAM 사용량(MB), 칩셋 온도는 웹 페이지 내에서 접근이 차단됨 ([Section 9 참고](#9-한계점-및-향후-과제-limitations--future-work)).
+  2. **GPU 프로파일 편차 관찰**: 현재 씬 규모(4만~17만 스플랫)에서는 GPU 메모리 튜닝 프로파일(`HIGH`, `BALANCED`, `MEMORY_SAVER`) 간 유의미한 FPS 편차가 관찰되지 않음 (GPU 병목이 발생하지 않는 안정 구간). 50만 개 이상의 대형 씬에서의 프로파일 효과는 후속 검증 과제로 분류.
+  3. **하드웨어 텔레메트리 한계**: 웹 브라우저 보안 샌드박스 정책으로 인해 기기 내부의 순수 GPU 점유율(%), VRAM 사용량(MB), 칩셋 온도는 웹 페이지 내에서 접근이 차단됨 (9번 항목 참고).
 
 [![CI](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](https://vitest.dev/)
@@ -33,7 +33,7 @@
 
 ## 데모 미리보기
 
-| Bonsai Tree (경량 .ksplat 씬) | Golden Dragon (.splat 씬) |
+| Bonsai Tree (.ksplat) | Golden Dragon (.splat) |
 | :---: | :---: |
 | ![Bonsai Tree Scene](docs/images/showcase_bonsai.png) | ![Golden Dragon Scene](docs/images/showcase_dragon.png) |
 
@@ -98,13 +98,13 @@ flowchart TB
 
 ## 4. 핵심 트러블슈팅 및 기술적 해결
 
-### 1) 모바일 HMD(Meta Quest)를 위한 GPU 연산 부하 최적화
+### 1) Meta Quest 기기를 위한 GPU 연산 부하 최적화
 * **문제 현상**:
   - Meta Quest의 모바일 프로세서는 반투명 입자가 여러 겹 겹치는 화면 덧칠 연산에 취약하여, 양안 VR 렌더링 시 프레임이 45fps 이하로 급락하는 현상 발생.
 * **해결 방법**:
-  - **투명 가우시안 연산 제외 (Alpha Cutoff)**: 형태에 영향을 주지 않는 불투명도 임계값 이하의 미세 입자를 렌더링에서 제외하여, 시각적 품질 손실 없이 실제 연산 입자 수를 30% 이상 절감.
-  - **입자 크기 미세 조절 (Splat Scale)**: 개별 입자의 크기를 조절하여 입자 간 중첩 면적을 줄이고 GPU 대역폭 부하를 완화.
-  - **실시간 GPU 튜닝 패널**: 새로고침 없이 화면에서 입자 크기, 투명도 컷오프, 점군(Point Cloud) 모드를 즉시 조절하며 최적의 프레임을 찾을 수 있는 UI 구축.
+  - **불투명도 임계값 필터링**: 형태에 영향을 주지 않는 불투명도 임계값 이하의 미세 입자를 렌더링에서 제외하여, 시각적 품질 손실 없이 실제 연산 입자 수를 30% 이상 절감.
+  - **가우시안 입자 크기 조절**: 개별 입자의 크기를 조절하여 입자 간 중첩 면적을 줄이고 GPU 대역폭 부하를 완화.
+  - **실시간 GPU 튜닝 패널**: 새로고침 없이 화면에서 입자 크기, 투명도 컷오프, 점군 모드를 즉시 조절하며 최적의 프레임을 찾을 수 있는 UI 구축.
 
 | 실시간 GPU 렌더 튜닝 & 최적화 HUD 패널 |
 | :---: |
@@ -124,7 +124,7 @@ flowchart TB
 | **상단 드롭다운 / 파일 열기** | 프리셋 모델 전환 (`Bonsai`, `Dragon`) 및 로컬 3DGS 파일 로드 |
 | **우측 상단 튜닝 버튼** | GPU 실시간 렌더 튜닝 드로어 패널 토글 |
 
-### Meta Quest (WebXR) 조작 가이드
+### Meta Quest 조작 가이드
 
 | 조작 | 기능 | 설명 |
 | :--- | :--- | :--- |
@@ -216,28 +216,28 @@ npm run lint
 
 ---
 
-## 9. 한계점 및 향후 과제 (Limitations & Future Work)
+## 9. 한계점 및 향후 과제
 
-### 현재 한계점 (Known Limitations)
+### 현재 한계점
 
 > 아래 항목들은 현재 시스템이 의도적으로 단순화하거나 아직 해결하지 못한 제약사항입니다.
 > 이를 솔직하게 명시하는 것이 시스템의 신뢰성을 높이는 방법이라고 판단했습니다.
 
 | # | 한계 항목 | 상세 내용 |
 | :--- | :--- | :--- |
-| **1** | **실기기(HMD) FPS/FrameTime 측정 완료 / 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS 및 환산 FrameTime을 측정하였습니다. Bonsai(175,745 splats): **70–80 FPS (12.50–14.28 ms)**, Dragon(46,737 splats): **80–90 FPS (11.11–12.50 ms)**로 72Hz 목표치를 달성하였습니다. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 하드웨어 텔레메트리 지표는 브라우저 보안 샌드박스 정책으로 인해 미수집되었으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정입니다. |
+| **1** | **실기기 기본 성능 측정 완료 및 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS 및 환산 FrameTime을 측정하였습니다. Bonsai(175,745 splats): **70–80 FPS (12.50–14.28 ms)**, Dragon(46,737 splats): **80–90 FPS (11.11–12.50 ms)**로 72Hz 목표치를 달성하였습니다. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 하드웨어 텔레메트리 지표는 브라우저 보안 샌드박스 정책으로 인해 미수집되었으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정입니다. |
 | **2** | **SharedArrayBuffer 멀티스레드 정렬 비활성화** | WebXR 환경의 CORS 보안 헤더(COOP/COEP) 구성 없이도 동작하도록 `sharedMemoryForWorkers: false`로 고정했습니다. 이로 인해 대용량 씬에서 가우시안 Radix 정렬이 단일 스레드로 수행되어 성능 저하가 발생할 수 있습니다. |
 | **3** | **동적 LOD / 점진적 스트리밍 미구현** | 씬 진입 시 전체 스플랫 데이터를 일괄 로드합니다. 수백만 개 이상의 가우시안을 포함하는 대규모 씬에서는 초기 로딩 지연 및 GPU 메모리 초과 위험이 있습니다. |
-| **4** | **E2E(End-to-End) 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버하지만, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않았습니다. |
-| **5** | **CD(지속적 배포) 미연동** | GitHub Actions CI는 자동화되어 있으나, Vercel / GitHub Pages 등 외부 서버로의 자동 배포 파이프라인은 구성되지 않았습니다. 외부 공유용 상시 데모 URL이 없어 직접 실행 환경이 필요합니다. |
+| **4** | **E2E 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버하지만, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않았습니다. |
+| **5** | **CD 자동 배포 미연동** | GitHub Actions CI는 자동화되어 있으나, Vercel / GitHub Pages 등 외부 서버로의 자동 배포 파이프라인은 구성되지 않았습니다. 외부 공유용 상시 데모 URL이 없어 직접 실행 환경이 필요합니다. |
 
 ---
 
-### 향후 과제 (Future Work)
+### 향후 과제
 
 우선순위 기준으로 정렬하였습니다:
 
-1. **Quest 3 실기기 상세 성능 지표 추가 수집** _(FPS 기본 측정 완료)_
+1. **Quest 3 실기기 상세 성능 지표 추가 수집 (기본 FPS 측정 완료)**
    - 기본 FPS는 확인됨 (Bonsai 70–80, Dragon 80–90). GPU 온도, 프레임 타임 분포, CPU·GPU 사용률, 메모리 점유율 등의 상세 지표는 Meta Quest Developer Hub(MQDH) 또는 ADB를 통해 추가 수집 필요
    - 50만 스플랫 이상 대형 씬에서의 GPU 프로파일별 효과 측정 미수행
 
