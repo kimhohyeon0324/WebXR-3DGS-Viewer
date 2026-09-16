@@ -1,7 +1,8 @@
 # WebXR_3DGS: 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어
 
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
-> WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 60~90 FPS의 안정적인 공간 탐색과 6DoF 인터랙션을 제공합니다.
+> WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 안정적인 6DoF 인터랙션을 제공합니다.  
+> ⚠️ **성능 수치 참고**: 데스크톱 Chrome 환경에서 60~90 FPS를 확인하였으나, Meta Quest 실기기(HMD)에서의 체계적인 FPS·GPU 메모리 실측 데이터는 아직 수집되지 않았습니다. 자세한 내용은 [한계점 및 향후 과제](#9-한계점-및-향후-과제-limitations--future-work) 섹션을 참고하세요.
 
 [![CI](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](https://vitest.dev/)
@@ -198,6 +199,49 @@ npm run lint
   - **호스팅 출처**: [Hugging Face `aswathselvam/splats`](https://huggingface.co/aswathselvam/splats/blob/main/dragon.splat)
   - **원본 데이터셋**: [Stanford 3D Scanning Repository](http://graphics.stanford.edu/data/3Dscanrep/) (Stanford Computer Graphics Laboratory)
   - **라이선스**: 연구 및 교육용 (Research & Educational Use)
+
+---
+
+## 9. 한계점 및 향후 과제 (Limitations & Future Work)
+
+### 현재 한계점 (Known Limitations)
+
+> 아래 항목들은 현재 시스템이 의도적으로 단순화하거나 아직 해결하지 못한 제약사항입니다.
+> 이를 솔직하게 명시하는 것이 시스템의 신뢰성을 높이는 방법이라고 판단했습니다.
+
+| # | 한계 항목 | 상세 내용 |
+| :--- | :--- | :--- |
+| **1** | **실기기(HMD) 벤치마크 미수행** | 서두에 명시된 "60~90 FPS"는 데스크톱 Chrome 환경에서 확인한 수치입니다. Meta Quest 3 실기기에서의 체계적인 FPS, GPU 온도, 메모리 점유율 실측 데이터는 아직 수집되지 않았습니다. |
+| **2** | **SharedArrayBuffer 멀티스레드 정렬 비활성화** | WebXR 환경의 CORS 보안 헤더(COOP/COEP) 구성 없이도 동작하도록 `sharedMemoryForWorkers: false`로 고정했습니다. 이로 인해 대용량 씬에서 가우시안 Radix 정렬이 단일 스레드로 수행되어 성능 저하가 발생할 수 있습니다. |
+| **3** | **동적 LOD / 점진적 스트리밍 미구현** | 씬 진입 시 전체 스플랫 데이터를 일괄 로드합니다. 수백만 개 이상의 가우시안을 포함하는 대규모 씬에서는 초기 로딩 지연 및 GPU 메모리 초과 위험이 있습니다. |
+| **4** | **E2E(End-to-End) 테스트 없음** | Vitest 단위 테스트 55개로 핵심 로직을 커버하지만, 실제 브라우저 렌더링 및 WebXR 세션 시나리오(VR 진입, 컨트롤러 인터랙션 등)에 대한 통합 테스트는 구현되지 않았습니다. |
+| **5** | **CD(지속적 배포) 미연동** | GitHub Actions CI는 자동화되어 있으나, Vercel / GitHub Pages 등 외부 서버로의 자동 배포 파이프라인은 구성되지 않았습니다. 외부 공유용 상시 데모 URL이 없어 직접 실행 환경이 필요합니다. |
+| **6** | **햅틱·오디오 메타데이터 연동 없음** | 병행 개발 중인 [XR_MetaData](https://github.com/kimhohyeon0324/XR_MetaData) 저작 도구와 아직 연결되지 않았습니다. 3DGS 씬 내 POI에 멀티모달 메타데이터를 직접 저작하는 통합 환경이 구현되어 있지 않습니다. |
+
+---
+
+### 향후 과제 (Future Work)
+
+우선순위 기준으로 정렬하였습니다:
+
+1. **Quest 3 실기기 FPS·GPU 실측 데이터 수집 및 문서화**
+   - 씬 규모(스플랫 수)에 따른 FPS, 프레임 타임, GPU 메모리 점유율을 계측하고 README에 반영
+
+2. **SharedArrayBuffer 활성화 환경 구성**
+   - 서버 측 COOP(`Cross-Origin-Opener-Policy`) / COEP(`Cross-Origin-Embedder-Policy`) 헤더 설정으로 멀티스레드 Radix 정렬 복원
+
+3. **XR_MetaData 통합 (멀티모달 3DGS 뷰어)**
+   - 3DGS 씬 내 POI에 햅틱·오디오 메타데이터를 직접 저작하는 통합 시스템 구현
+   - 현재 각각 독립된 두 프로젝트를 단일 WebXR 환경으로 결합
+
+4. **동적 LOD / Octree 기반 점군 스트리밍**
+   - 대규모 씬 대응: 뷰포트 거리에 따라 스플랫 해상도를 동적으로 조절하는 LOD 파이프라인
+
+5. **Playwright 기반 WebXR E2E 테스트**
+   - 브라우저 헤드리스 환경에서 VR 세션 진입·컨트롤러 이벤트 시뮬레이션 자동화
+
+6. **CD 자동 배포 연동**
+   - GitHub Actions CD 워크플로우 추가 → Vercel / GitHub Pages 상시 데모 URL 제공
 
 ---
 
