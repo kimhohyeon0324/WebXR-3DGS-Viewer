@@ -1,7 +1,7 @@
 # WebXR_3DGS: 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어
 
 > **Three.js 및 WebXR 기반 3D 가우시안 스플래팅 실시간 인터랙티브 뷰어 시스템**  
-> WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 70~90 FPS의 안정적인 공간 탐색과 6DoF 인터랙션을 제공합니다.
+> WebGL 2.0 및 WebXR Device API를 기반으로, 브라우저 및 Meta Quest 독립형 환경에서 70~90 FPS의 안정적인 공간 탐색과 6DoF 인터랙션 제공.
 
 [![CI](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/kimhohyeon0324/WebXR-3DGS-Viewer/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](https://vitest.dev/)
@@ -179,7 +179,7 @@ npm run typecheck
 # ESLint 코드 품질 및 컨벤션 검사 (0 errors, 0 warnings)
 npm run lint
 ```
-> 본 저장소는 GitHub Actions CI와 연동되어 있으며, 모든 PR 및 `main` 브랜치 Push 시 Node.js v20/v22 환경에서 린트, 타입, 테스트, 빌드 무결성을 자동 검증.
+> 본 저장소는 GitHub Actions CI와 연동되어 있으며, 모든 PR 및 `main` 브랜치 Push 시 Node.js v20/v22 환경에서 린트, 타입, 테스트, 빌드 무결성 자동 검증.
 
 ---
 
@@ -188,21 +188,21 @@ npm run lint
 1. **동일한 로컬 네트워크(Wi-Fi) 연결**:
    - 서버를 구동 중인 PC와 Meta Quest 헤드셋이 반드시 같은 공유기(Wi-Fi)에 연결되어 있어야 함.
 2. **Quest 브라우저에서 접속**:
-   - 헤드셋을 착용하고 오큘러스 브라우저 주소창에 터미널에 출력된 IP 주소를 입력:
+   - 헤드셋을 착용하고 오큘러스 브라우저 주소창에 터미널에 출력된 IP 주소 입력:
      ```
      https://<PC_로컬_IP>:5173
      ```
 3. **자체 서명 SSL 인증서 승인 (최초 1회 필수)**:
-   - WebXR 구동을 위해서는 HTTPS 보안 컨텍스트가 필수.
-   - 첫 접속 시 **"연결이 비공개로 설정되어 있지 않습니다"** 경고가 표시될 경우, 화면 하단의 **[고급(Advanced)]** 클릭 후 **[<PC_IP> (안전하지 않음)으로 이동]** 을 선택하여 승인.
+   - WebXR 구동을 위해서는 HTTPS 보안 컨텍스트 필수.
+   - 첫 접속 시 **"연결이 비공개로 설정되어 있지 않습니다"** 경고 표시 시, 화면 하단의 **[고급]** 클릭 후 **[<PC_IP> (안전하지 않음)으로 이동]** 선택하여 승인.
 4. **VR 진입**:
-   - 화면 우측 상단의 **`ENTER VR`** 버튼을 클릭하여 몰입형 3DGS 6DoF 세션으로 진입.
+   - 화면 우측 상단의 **`ENTER VR`** 버튼을 클릭하여 몰입형 3DGS 6DoF 세션 진입.
 
 ---
 
 ## 8. 외부 에셋 라이선스
 
-프로젝트에 활용된 3DGS 모델 에셋은 [Hugging Face (`aswathselvam/splats`)](https://huggingface.co/aswathselvam/splats) 저장소에서 배포된 웹 최적화 샘플을 사용하였으며, 각 씬의 원본 데이터셋 출처는 다음과 같음:
+프로젝트에 활용된 3DGS 모델 에셋은 [Hugging Face (`aswathselvam/splats`)](https://huggingface.co/aswathselvam/splats) 저장소에서 배포된 웹 최적화 샘플을 사용, 각 씬의 원본 데이터셋 출처는 다음과 같음:
 
 * **Bonsai Tree Scene (`.ksplat`)**:
   - **호스팅 출처**: [Hugging Face `aswathselvam/splats`](https://huggingface.co/aswathselvam/splats/blob/main/bonsai_trimmed.ksplat)
@@ -222,7 +222,7 @@ npm run lint
 > 아래 항목들은 현재 시스템이 의도적으로 단순화하거나 아직 해결하지 못한 제약사항.
 > 이를 솔직하게 명시하는 것이 시스템의 신뢰성을 높이는 방법이라고 판단.
 
-|  | 한계 항목 | 상세 내용 |
+| # | 한계 항목 | 상세 내용 |
 | :--- | :--- | :--- |
 | **1** | **실기기 기본 성능 측정 완료 및 상세 지표 미수집** | Meta Quest 3 Oculus Browser 환경에서 stats-gl로 VR 세션 중 FPS 및 환산 FrameTime을 측정. Bonsai(175,745 splats): **70–80 FPS (12.50–14.28 ms)**, Dragon(46,737 splats): **80–90 FPS (11.11–12.50 ms)** 로 72Hz 목표치를 달성. 단, GPU 온도·메모리 점유율·CPU 사용률·프레임 타임 분포 등의 하드웨어 텔레메트리 지표는 브라우저 보안 샌드박스 정책으로 인해 미수집되었으며, 50만 스플랫 이상 대형 씬에서의 성능은 미측정. |
 | **2** | **SharedArrayBuffer 멀티스레드 정렬 비활성화** | WebXR 환경의 CORS 보안 헤더(COOP/COEP) 구성 없이도 동작하도록 `sharedMemoryForWorkers: false`로 고정. 이로 인해 대용량 씬에서 가우시안 Radix 정렬이 단일 스레드로 수행되어 성능 저하가 발생할 수 있음. |
@@ -234,7 +234,7 @@ npm run lint
 
 ### 향후 과제
 
-우선순위 기준으로 정렬하였습니다:
+우선순위 기준 정렬:
 
 1. **Quest 3 실기기 상세 성능 지표 추가 수집 (기본 FPS 측정 완료)**
    - 기본 FPS는 확인됨 (Bonsai 70–80, Dragon 80–90). GPU 온도, 프레임 타임 분포, CPU·GPU 사용률, 메모리 점유율 등의 상세 지표는 Meta Quest Developer Hub(MQDH) 또는 ADB를 통해 추가 수집 필요
@@ -256,6 +256,6 @@ npm run lint
 
 ## 라이선스
 
-본 프로젝트의 소스코드는 [MIT License](LICENSE)를 따릅니다.
+본 프로젝트의 소스코드는 [MIT License](LICENSE) 준수.
 
 
